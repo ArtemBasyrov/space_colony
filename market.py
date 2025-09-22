@@ -4,8 +4,11 @@ class Market:
     def __init__(self):
         # Base prices for resources
         self.base_prices = {
-            'minerals': 5,
-            'food': 8
+            'regolith': 5,
+            'food': 8,
+            'oxygen': 4,
+            'hydrogen': 3,
+            'fuel': 10,
         }
         
         # Current market prices
@@ -19,20 +22,29 @@ class Market:
         
         # Market depth - simulates other traders in the market
         self.market_depth = {
-            'minerals': 10000,  # Total minerals available in the market
-            'food': 5000        # Total food available in the market
+            'regolith': 10000,  # Total minerals available in the market
+            'food': 5000,        # Total food available in the market
+            'oxygen': 8000,
+            'hydrogen': 10000,
+            'fuel': 3000
         }
         
         # Player influence tracking
         self.player_transactions = {
-            'minerals': {'bought': 0, 'sold': 0},
-            'food': {'bought': 0, 'sold': 0}
+            'regolith': {'bought': 0, 'sold': 0},
+            'food': {'bought': 0, 'sold': 0},
+            'oxygen': {'bought': 0, 'sold': 0},
+            'hydrogen': {'bought': 0, 'sold': 0},
+            'fuel': {'bought': 0, 'sold': 0}
         }
         
         # Market elasticity - how quickly prices respond to player actions
         self.elasticity = {
-            'minerals': 0.0002,  # Price change per unit traded
-            'food': 0.0003       # Food is more elastic (prices change faster)
+            'regolith': 0.0002,  # Price change per unit traded
+            'food': 0.0003,       # Food is more elastic (prices change faster)
+            'oxygen': 0.00025,
+            'hydrogen': 0.0002,
+            'fuel': 0.00035
         }
         
         # Market recovery rate - how quickly prices return to equilibrium

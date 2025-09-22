@@ -1,6 +1,6 @@
 # buildings.py - update the Building class
 class Building:
-    def __init__(self, name, description, max_workers, energy_consumption=0, mineral_consumption=0):
+    def __init__(self, name, description, max_workers, energy_consumption=0, mineral_consumption=0, required_surface=None):
         self.name = name
         self.description = description
         self.max_workers = max_workers
@@ -8,8 +8,15 @@ class Building:
         self.assigned_colonists = []  # Track individual colonists
         self.energy_consumption = energy_consumption
         self.mineral_consumption = mineral_consumption
+        self.required_surface = required_surface  # None for any surface, or specific surface type
         self.active = True
         self.base_wage = 6  # Base wage for all workers
+        
+    def can_be_placed_on(self, hexagon):
+        """Check if building can be placed on this hexagon type"""
+        if self.required_surface is None:
+            return True
+        return hexagon.surface_type == self.required_surface
         
     def assign_colonist(self, colonist, wage=None):
         """Assign a colonist to this building with optional custom wage"""
@@ -37,53 +44,60 @@ class Building:
         if not self.active:
             return {}
             
-        # Simple production based on number of workers
-        if isinstance(self, Mine):
-            return {'minerals': self.assigned_workers * self.production_rate}
-        elif isinstance(self, EnergyGenerator):
-            return {'energy': self.assigned_workers * self.production_rate}
-        elif isinstance(self, OxygenGenerator):
-            return {'oxygen': self.assigned_workers * self.production_rate}
-        elif isinstance(self, HydroponicFarm):
-            return {'food': self.assigned_workers * self.production_rate}
-        elif isinstance(self, Hospital):
-            return {}  # Hospitals don't produce resources
         return {}
         
     def calculate_consumption(self):
         """Calculate consumption based on assigned workers"""
         consumption = {
             'energy': self.energy_consumption * (self.assigned_workers / max(1, self.max_workers)),
-            'minerals': self.mineral_consumption * (self.assigned_workers / max(1, self.max_workers))
+            'regolith': self.mineral_consumption * (self.assigned_workers / max(1, self.max_workers))
         }
         return consumption
+    
+    # buildings.py - add this method to the Building class
+    def can_operate(self, resource_manager):
+        """Check if this building has enough resources to operate"""
+        consumption = self.calculate_consumption()
+        for resource, amount in consumption.items():
+            if amount > 0 and getattr(resource_manager, resource, 0) < amount:
+                return False
+        return True
+
+    def calculate_effective_production(self, resource_manager):
+        """Calculate production, but return zero if not enough resources"""
+        if not self.can_operate(resource_manager):
+            return {}
+        return self.calculate_production()
 
 class Mine(Building):
     def __init__(self):
         super().__init__(
-            name="Crystal Mine",
-            description="Extracts minerals from earth. Requires energy.",
+            name="Regolith Mine",
+            description="Extracts raw regolith from earth. Requires energy.",
             max_workers=20,
-            energy_consumption=5
+            energy_consumption=5,
+            required_surface="regolith"
         )
-        self.production_rate = 2.0  # Minerals per worker
+        self.production_rate = 2.0  # Raw regolith per worker
         
     def calculate_production(self):
         if not self.active:
             return {}
             
         return {
-            'minerals': self.assigned_workers * self.production_rate
+            'regolith': self.assigned_workers * self.production_rate
         }
 
 class EnergyGenerator(Building):
     def __init__(self):
         super().__init__(
             name="Fusion Reactor",
-            description="Generates energy. Requires minerals for fuel.",
+            description="Generates energy. Requires fuel.",
             max_workers=10,
-            mineral_consumption=3
+            mineral_consumption=0,  # Now uses fuel instead of minerals
+            energy_consumption=0
         )
+        self.fuel_consumption = 3  # New fuel consumption
         self.production_rate = 4.0  # Energy per worker
         
     def calculate_production(self):
@@ -93,6 +107,12 @@ class EnergyGenerator(Building):
         return {
             'energy': self.assigned_workers * self.production_rate
         }
+        
+    def calculate_consumption(self):
+        """Override consumption to include fuel"""
+        consumption = super().calculate_consumption()
+        consumption['fuel'] = self.fuel_consumption * (self.assigned_workers / max(1, self.max_workers))
+        return consumption
 
 class OxygenGenerator(Building):
     def __init__(self):
@@ -129,17 +149,87 @@ class HydroponicFarm(Building):
         return {
             'food': self.assigned_workers * self.production_rate
         }
-    
+
+class IceExtractor(Building):
+    def __init__(self):
+        super().__init__(
+            name="Ice Extractor",
+            description="Extracts oxygen and hydrogen from ice deposits. Requires energy.",
+            max_workers=12,
+            energy_consumption=6,
+            required_surface="ice"
+        )
+        self.oxygen_production_rate = 2.0  # Oxygen per worker
+        self.hydrogen_production_rate = 1.5  # Hydrogen per worker
+        
+    def calculate_production(self):
+        if not self.active:
+            return {}
+            
+        return {
+            'oxygen': self.assigned_workers * self.oxygen_production_rate,
+            'hydrogen': self.assigned_workers * self.hydrogen_production_rate
+        }
+
+class ChemicalProcessingPlant(Building):
+    def __init__(self):
+        super().__init__(
+            name="Chemical Processing Plant",
+            description="Converts hydrogen into fuel. Requires energy.",
+            max_workers=8,
+            energy_consumption=4
+        )
+        self.hydrogen_consumption = 2  # Hydrogen consumed per worker
+        self.production_rate = 1.0  # Fuel produced per worker
+        
+    def calculate_production(self):
+        if not self.active:
+            return {}
+            
+        return {
+            'fuel': self.assigned_workers * self.production_rate
+        }
+        
+    def calculate_consumption(self):
+        """Override consumption to include hydrogen"""
+        consumption = super().calculate_consumption()
+        consumption['hydrogen'] = self.hydrogen_consumption * (self.assigned_workers / max(1, self.max_workers))
+        return consumption
+
+class SolarPanelArray(Building):
+    def __init__(self):
+        super().__init__(
+            name="Solar Panel Array",
+            description="Generates energy from sunlight. No workers required.",
+            max_workers=0,  # No workers needed
+            energy_consumption=0
+        )
+        self.production_rate = 10.0  # Energy production (not based on workers)
+        
+    def calculate_production(self):
+        if not self.active:
+            return {}
+            
+        return {
+            'energy': self.production_rate  # Constant production, no workers
+        }
+        
+    def calculate_consumption(self):
+        """No consumption for solar panels"""
+        return {}
+
+# buildings.py - update the Hospital class
 class Hospital(Building):
     def __init__(self):
         super().__init__(
             name="Hospital",
-            description="Improves population health. Requires energy and minerals.",
+            description="Improves population health. Requires energy and raw regolith.",
             max_workers=6,
             energy_consumption=6,
             mineral_consumption=2
         )
         self.production_rate = 3.0  # Health points per worker
+        self.max_capacity = 30  # Maximum colonists one hospital can effectively serve when fully staffed
         
     def calculate_production(self):
         if not self.active:
@@ -148,11 +238,31 @@ class Hospital(Building):
         # Hospital doesn't produce resources, but improves health
         return {}
         
-    def calculate_health_boost(self):
+    def calculate_health_boost(self, total_population):
+        """Calculate health boost based on assigned workers and population served"""
         if not self.active:
             return 0
             
-        return self.assigned_workers * self.production_rate
+        # Base health production from workers
+        base_health_production = self.assigned_workers * self.production_rate
+        
+        # Calculate the effective capacity based on staffing level
+        # Fully staffed (6 workers) = 100% capacity, half staffed = 50% capacity, etc.
+        staffing_ratio = self.assigned_workers / max(1, self.max_workers)
+        effective_capacity = self.max_capacity * staffing_ratio
+        
+        # Calculate how many colonists this hospital is effectively serving
+        # This distributes the hospital's effect proportionally across the population
+        if total_population <= effective_capacity:
+            # Hospital can serve the entire population effectively
+            health_boost_per_colonist = base_health_production / max(1, total_population)
+        else:
+            # Hospital is overloaded - effect is diluted
+            overload_ratio = effective_capacity / total_population
+            effective_health_production = base_health_production * overload_ratio
+            health_boost_per_colonist = effective_health_production / max(1, total_population)
+            
+        return health_boost_per_colonist
     
 class HabitatBlock(Building):
     def __init__(self):
@@ -205,7 +315,8 @@ def get_building_metadata(building_class):
     temp_instance = building_class()
     return {
         "name": temp_instance.name,
-        "description": temp_instance.description
+        "description": temp_instance.description,
+        "required_surface": temp_instance.required_surface
     }
 
 # Building prices and definitions - now synchronized with classes
@@ -217,7 +328,7 @@ BUILDING_CATALOG = {
     },
     "EnergyGenerator": {
         "class": EnergyGenerator, 
-        "price": 600,
+        "price": 800,
         "metadata": get_building_metadata(EnergyGenerator)
     },
     "OxygenGenerator": {
@@ -229,6 +340,21 @@ BUILDING_CATALOG = {
         "class": HydroponicFarm,
         "price": 550,
         "metadata": get_building_metadata(HydroponicFarm)
+    },
+    "IceExtractor": {
+        "class": IceExtractor,
+        "price": 650,
+        "metadata": get_building_metadata(IceExtractor)
+    },
+    "ChemicalProcessingPlant": {
+        "class": ChemicalProcessingPlant,
+        "price": 700,
+        "metadata": get_building_metadata(ChemicalProcessingPlant)
+    },
+    "SolarPanelArray": {
+        "class": SolarPanelArray,
+        "price": 500,
+        "metadata": get_building_metadata(SolarPanelArray)
     },
     "Hospital": {
         "class": Hospital,
@@ -253,6 +379,10 @@ def get_building_name(building_name):
 def get_building_description(building_name):
     """Get the description of a building from the catalog"""
     return BUILDING_CATALOG.get(building_name, {}).get("metadata", {}).get("description", "No description available.")
+
+def get_building_required_surface(building_name):
+    """Get the required surface type for a building from the catalog"""
+    return BUILDING_CATALOG.get(building_name, {}).get("metadata", {}).get("required_surface", None)
 
 def create_building_from_name(building_name):
     """Create a building instance from its name"""

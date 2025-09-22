@@ -1,6 +1,5 @@
 # graphics.py
 import pygame
-import sys
 from pygame.locals import *
 
 from .main_screen import MainScreen
@@ -8,6 +7,28 @@ from .market_screen import MarketScreen
 from .wages_screen import WagesScreen
 from events import EventType
 from .construction_screen import ConstructionScreen 
+
+import sys
+import os
+
+def resource_path(relative_path):
+    """ Get the absolute path to a resource """
+    try:
+        # PyInstaller and cx_Freeze use different methods
+        # For cx_Freeze, the assets are in the same directory as the executable
+        if hasattr(sys, 'frozen'):
+            # Running as compiled executable
+            base_path = os.path.dirname(sys.executable)
+        else:
+            # Running as script
+            base_path = os.path.dirname(__file__)
+        
+        full_path = os.path.join(base_path, relative_path)
+        
+        return full_path
+    except Exception as e:
+        print(f"Error in resource_path: {e}")
+        return relative_path  # Fallback to relative path
 
 class Graphics:
     def __init__(self, game):
@@ -25,6 +46,8 @@ class Graphics:
             'panel': (30, 40, 60),
             'text': (220, 220, 220),
             'highlight': (0, 150, 255),
+            'panel_warning': (120, 40, 40),
+            'highlight_warning': (200, 50, 50),
             'warning': (255, 100, 100),
             'success': (100, 255, 100),
             'resource': (150, 200, 255),
@@ -79,14 +102,17 @@ class Graphics:
         """Handle incoming game events"""
         self.show_message(event.message)
 
+    # graphics.py - update the load_icons method
     def load_icons(self):
         """Load all resource icons"""
         icon_paths = {
             'oxygen': 'assets/images/oxygen.png',
             'food': 'assets/images/food.png', 
-            'minerals': 'assets/images/minerals.png',
             'energy': 'assets/images/energy.png',
-            'credits': 'assets/images/credits.png'
+            'credits': 'assets/images/credits.png',
+            'hydrogen': 'assets/images/hydrogen.png',
+            'fuel': 'assets/images/fuel.png',
+            'regolith': 'assets/images/minerals.png'
         }
         
         for resource, path in icon_paths.items():

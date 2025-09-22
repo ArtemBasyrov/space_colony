@@ -4,9 +4,11 @@ class ResourceManager:
     def __init__(self):
         self.oxygen = 100
         self.food = 100
-        self.minerals = 50
+        self.regolith = 50  # Changed from minerals to regolith
         self.energy = 75
         self.credits = 1000
+        self.hydrogen = 0  # New resource
+        self.fuel = 25     # New resource
         
         self.images = {}
         self.fonts = {}
@@ -24,11 +26,16 @@ class ResourceManager:
                 current = getattr(self, resource)
                 setattr(self, resource, max(0, current - amount))
 
-        # resources.py - update the update method
     def update(self, population, buildings):
         # Calculate total production and consumption from all buildings
-        total_production = {'oxygen': 0, 'food': 0, 'minerals': 0, 'energy': 0, 'credits': 0}
-        total_consumption = {'oxygen': 0, 'food': 0, 'minerals': 0, 'energy': 0, 'credits': 0}
+        total_production = {
+            'oxygen': 0, 'food': 0, 'regolith': 0, 'energy': 0, 
+            'credits': 0, 'hydrogen': 0, 'fuel': 0
+        }
+        total_consumption = {
+            'oxygen': 0, 'food': 0, 'regolith': 0, 'energy': 0, 
+            'credits': 0, 'hydrogen': 0, 'fuel': 0
+        }
         
         # Base consumption by population - now based on individual colonists
         total_consumption['oxygen'] += population.count * 0.1
@@ -37,12 +44,12 @@ class ResourceManager:
         
         # Calculate building production and consumption
         for building in buildings:
-            production = building.calculate_production()
+            production = building.calculate_effective_production(self)  # Use the new method
             consumption = building.calculate_consumption()
             
             for resource, amount in production.items():
                 total_production[resource] += amount
-                
+                    
             for resource, amount in consumption.items():
                 total_consumption[resource] += amount
         

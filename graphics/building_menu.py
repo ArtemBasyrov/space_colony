@@ -7,15 +7,6 @@ class BuildingMenu:
         self.selected_building = None
         self.rect = pygame.Rect(840, 420, 164, 180)
         
-        # Resource symbols mapping
-        self.resource_symbols = {
-            'oxygen': 'O₂',
-            'food': '🍎',
-            'minerals': '⛏️',
-            'energy': '⚡',
-            'credits': '💰'
-        }
-        
         # Store button rectangles for click handling
         self.add_button_rect = pygame.Rect(850, 550, 70, 25)
         self.remove_button_rect = pygame.Rect(930, 550, 70, 25)

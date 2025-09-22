@@ -1,7 +1,7 @@
 # construction_screen.py
 import pygame
 from .screen import Screen
-from buildings import get_building_price, create_building_from_name, BUILDING_CATALOG, get_building_name, get_building_description
+from buildings import get_building_price, create_building_from_name, BUILDING_CATALOG, get_building_name, get_building_description, get_building_required_surface
 
 class ConstructionScreen(Screen):
     def __init__(self, graphics):
@@ -9,7 +9,7 @@ class ConstructionScreen(Screen):
         self.selected_building = None
         self.scroll_offset = 0
         self.max_visible_buildings = 4  # Number of buildings that can fit in the visible area
-    
+        
     def on_button_click(self, action):
         """Handle button clicks in construction screen"""
         if action == "back":
@@ -29,10 +29,8 @@ class ConstructionScreen(Screen):
             max_offset = max(0, len(BUILDING_CATALOG) - self.max_visible_buildings)
             self.scroll_offset = min(max_offset, self.scroll_offset + 1)
     
-    # construction_screen.py - update the purchase_building method
     def purchase_building(self):
         """Purchase the selected building"""
-        
         building_type = self.selected_building
         price = get_building_price(building_type)
         
@@ -44,9 +42,14 @@ class ConstructionScreen(Screen):
             self.game.pending_construction = (building_type, price)
             
             # Store building info for potential refund
-            from buildings import get_building_name
             building_name = get_building_name(building_type)
-            self.game.graphics.show_message(f"Purchased {building_name} for {price} credits. Click on an empty hexagon to place it. Press ESC to cancel.")
+            required_surface = get_building_required_surface(building_type)
+            
+            if required_surface:
+                self.game.graphics.show_message(f"Purchased {building_name} for {price} credits. Click on a {required_surface} hexagon to place it. Press ESC to cancel.")
+            else:
+                self.game.graphics.show_message(f"Purchased {building_name} for {price} credits. Click on an empty hexagon to place it. Press ESC to cancel.")
+                
             self.graphics.set_screen('main')
         else:
             self.graphics.show_message("Not enough credits to purchase this building!")
@@ -64,9 +67,11 @@ class ConstructionScreen(Screen):
     
     def draw(self):
         """Draw the construction screen"""
-        
         # Background
         self.graphics.screen.fill(self.graphics.colors['background'])
+
+        # Clear buttons from previous frame
+        self.buttons.clear()
         
         # Title
         title_text = self.graphics.title_font.render("Construction Menu", True, self.graphics.colors['text'])
@@ -106,6 +111,7 @@ class ConstructionScreen(Screen):
             building_name, building_info = building_items[i]
             building_instance = building_info["class"]()
             price = building_info["price"]
+            required_surface = building_info["metadata"]["required_surface"]
             
             # Building card
             card_color = self.graphics.colors['button_hover'] if building_name == self.selected_building else self.graphics.colors['button']
@@ -116,13 +122,25 @@ class ConstructionScreen(Screen):
             name_text = self.graphics.header_font.render(get_building_name(building_name), True, self.graphics.colors['text'])
             self.graphics.screen.blit(name_text, (40, y_offset + 10))
             
-            # Price with credits icon - "Price: {credits icon} {amount}"
+            # Surface requirement indicator
+            if required_surface:
+                surface_color = {
+                    'regolith': (180, 160, 140),
+                    'ice': (200, 220, 240),
+                    'stone': (120, 120, 120)
+                }.get(required_surface, (100, 100, 100))
+                
+                pygame.draw.rect(self.graphics.screen, surface_color, (40, y_offset + 35, 15, 15))
+                surface_text = self.graphics.small_font.render(f"Requires {required_surface}", True, self.graphics.colors['text'])
+                self.graphics.screen.blit(surface_text, (60, y_offset + 35))
+            
+            # Price with credits icon
             price_text = self.graphics.normal_font.render(f"Price:", True, self.graphics.colors['text'])
-            self.graphics.screen.blit(price_text, (60, y_offset + 40))
+            self.graphics.screen.blit(price_text, (40, y_offset + 55))
             if 'credits' in self.graphics.icons:
-                self.graphics.screen.blit(self.graphics.icons['credits'], (110, y_offset + 37))
+                self.graphics.screen.blit(self.graphics.icons['credits'], (85, y_offset + 52))
             price_text = self.graphics.normal_font.render(f"{price}", True, self.graphics.colors['text'])
-            self.graphics.screen.blit(price_text, (137, y_offset + 40))
+            self.graphics.screen.blit(price_text, (112, y_offset + 55))
             
             # Building description
             desc_text = self.graphics.small_font.render(get_building_description(building_name), True, self.graphics.colors['text'])
@@ -182,7 +200,7 @@ class ConstructionScreen(Screen):
             for resource, amount, is_production in production_items:
                 # Draw resource icon
                 if resource in self.graphics.icons:
-                    self.graphics.screen.blit(self.graphics.icons[resource], (bottom_line_x, bottom_line_y))
+                    self.graphics.screen.blit(self.graphics.icons[resource], (bottom_line_x, bottom_line_y-3))
                     bottom_line_x += 25
                 
                 # Draw value with appropriate color

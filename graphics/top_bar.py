@@ -5,17 +5,24 @@ class TopBar:
         self.graphics = graphics
         self.width = graphics.width
         self.height = 50
+        self.resource_panel_width = self.width - 20
     
-    def draw_resource_indicator(self, x, y, resource_name, value, change, color, resource_key):
+    def draw_resource_indicator(self, x, y, resource_name, value, change, resource_key, width):
         """Draw a resource indicator with icon, value, and expected change"""
-        # Background panel
-        pygame.draw.rect(self.graphics.screen, (40, 50, 70), (x, y, 180, 40), border_radius=5)
-        pygame.draw.rect(self.graphics.screen, self.graphics.colors['highlight'], (x, y, 180, 40), 1, border_radius=5)
+        # Background panel - highlight in red if resource is zero
+        if value <= 0 and change < 0:
+            panel_color = self.graphics.colors['panel_warning']  # Red background for critical resources
+            border_color = self.graphics.colors['highlight_warning']  # Red border
+        else:
+            panel_color = self.graphics.colors['panel']   # Normal background
+            border_color = self.graphics.colors['highlight']  # Normal border
         
-        # Icon - get from the current screen's icons
-        current_screen = self.graphics.screens[self.graphics.current_screen]
-        if hasattr(current_screen, 'icons') and resource_key in current_screen.graphics.icons:
-            self.graphics.screen.blit(current_screen.graphics.icons[resource_key], (x + 8, y + 8))
+        pygame.draw.rect(self.graphics.screen, panel_color, (x, y, width, self.height-10), border_radius=5)
+        pygame.draw.rect(self.graphics.screen, border_color, (x, y, width, self.height-10), 1, border_radius=5)
+        
+        # Icon - get from the graphics's icons
+        if hasattr(self.graphics, 'icons') and resource_key in self.graphics.icons:
+            self.graphics.screen.blit(self.graphics.icons[resource_key], (x + 8, y + 8))
         
         # Resource name and value
         name_text = self.graphics.small_font.render(f"{resource_name}: {self.graphics.format_number(value)}", True, self.graphics.colors['text'])
@@ -33,9 +40,15 @@ class TopBar:
         pygame.draw.rect(self.graphics.screen, (25, 35, 55), (0, 0, self.width, self.height))
         pygame.draw.rect(self.graphics.screen, self.graphics.colors['highlight'], (0, 0, self.width, self.height), 1)
         
+        # Get number of resources to display and calculate spacing
+        num_resources = len(calculated_changes.keys())
+        spacing = (self.resource_panel_width-10*num_resources) // num_resources
+
         # Draw resource indicators
-        self.draw_resource_indicator(10, 5, "Oxygen", resources.oxygen, calculated_changes['oxygen'], (100, 200, 255), 'oxygen')
-        self.draw_resource_indicator(200, 5, "Food", resources.food, calculated_changes['food'], (150, 255, 100), 'food')
-        self.draw_resource_indicator(390, 5, "Minerals", resources.minerals, calculated_changes['minerals'], (200, 150, 100), 'minerals')
-        self.draw_resource_indicator(580, 5, "Energy", resources.energy, calculated_changes['energy'], (255, 200, 50), 'energy')
-        self.draw_resource_indicator(770, 5, "Credits", resources.credits, calculated_changes['credits'], (255, 215, 0), 'credits')
+        self.draw_resource_indicator(10, 5, "Oxygen", resources.oxygen, calculated_changes['oxygen'], 'oxygen', spacing)
+        self.draw_resource_indicator(1*spacing+20, 5, "Hydrogen", resources.hydrogen, calculated_changes['hydrogen'], 'hydrogen', spacing)
+        self.draw_resource_indicator(2*spacing+30, 5, "Food", resources.food, calculated_changes['food'], 'food', spacing)
+        self.draw_resource_indicator(3*spacing+40, 5, "Regolith", resources.regolith, calculated_changes['regolith'], 'regolith', spacing)
+        self.draw_resource_indicator(4*spacing+50, 5, "Energy", resources.energy, calculated_changes['energy'], 'energy', spacing)
+        self.draw_resource_indicator(5*spacing+60, 5, "Fuel", resources.fuel, calculated_changes['fuel'], 'fuel', spacing)
+        self.draw_resource_indicator(6*spacing+70, 5, "Credits", resources.credits, calculated_changes['credits'], 'credits', spacing)

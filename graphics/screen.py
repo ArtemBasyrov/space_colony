@@ -3,6 +3,7 @@ import math
 from abc import ABC, abstractmethod
 
 class Screen(ABC):
+    # screen.py - update the __init__ method
     def __init__(self, graphics):
         self.graphics = graphics
         self.game = graphics.game
@@ -20,14 +21,6 @@ class Screen(ABC):
         # Merge with existing colors
         self.all_colors = {**self.graphics.colors, **self.hex_colors}
         
-        # Create resource icons
-        self.icons = {
-            'oxygen': graphics.game.resources.get_image('oxygen'),
-            'food': graphics.game.resources.get_image('food'),
-            'minerals': graphics.game.resources.get_image('minerals'),
-            'energy': graphics.game.resources.get_image('energy'),
-            'credits': graphics.game.resources.get_image('credits')
-        }
         
     @abstractmethod
     def draw(self):
@@ -57,10 +50,17 @@ class Screen(ABC):
             return f"{value:.2f}"
         return str(value)
     
-    def draw_panel(self, x, y, width, height, title=None):
+    def draw_panel(self, x, y, width, height, title=None, warning=False):
         """Draw a UI panel with optional title"""
-        pygame.draw.rect(self.graphics.screen, self.graphics.colors['panel'], (x, y, width, height), border_radius=5)
-        pygame.draw.rect(self.graphics.screen, self.graphics.colors['highlight'], (x, y, width, height), 2, border_radius=5)
+        if warning:
+            panel_color = self.graphics.colors['panel_warning']
+            border_color = self.graphics.colors['highlight_warning']
+        else:
+            panel_color = self.graphics.colors['panel']
+            border_color = self.graphics.colors['highlight']
+
+        pygame.draw.rect(self.graphics.screen, panel_color, (x, y, width, height), border_radius=5)
+        pygame.draw.rect(self.graphics.screen, border_color, (x, y, width, height), 2, border_radius=5)
         
         if title:
             title_text = self.graphics.header_font.render(title, True, self.graphics.colors['text'])
@@ -114,8 +114,8 @@ class Screen(ABC):
         pygame.draw.rect(self.graphics.screen, self.graphics.colors['highlight'], (x, y, 180, 40), 1, border_radius=5)
         
         # Icon
-        if resource_key in self.icons:
-            self.graphics.screen.blit(self.icons[resource_key], (x + 8, y + 8))
+        if resource_key in self.graphics.icons:
+            self.graphics.screen.blit(self.graphics.icons[resource_key], (x + 8, y + 8))
         
         # Resource name and value
         name_text = self.graphics.small_font.render(f"{resource_name}: {self.format_number(value)}", True, self.graphics.colors['text'])

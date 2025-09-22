@@ -8,16 +8,21 @@ class PopulationPanel:
     # population_panel.py - update to show individual stats
     def draw(self, population):
         """Draw the population panel"""
-        self.screen.draw_panel(self.rect.x, self.rect.y, self.rect.width, self.rect.height, "Population")
+        avg_happiness = population.calculate_average_happiness()
+        avg_health = population.calculate_average_health()
+        if avg_happiness < 20 or avg_health < 20:
+            warning = True
+        else:
+            warning = False
+
+        self.screen.draw_panel(self.rect.x, self.rect.y, self.rect.width, self.rect.height, "Population", warning)
         
         text = self.screen.graphics.small_font.render(f"Colonists: {population.count}/1000", True, self.screen.graphics.colors['text'])
         self.screen.graphics.screen.blit(text, (self.rect.x + 10, self.rect.y + 40))
         
-        avg_happiness = population.calculate_average_happiness()
         text = self.screen.graphics.small_font.render(f"Avg Happiness: {avg_happiness:.1f}", True, self.screen.graphics.colors['text'])
         self.screen.graphics.screen.blit(text, (self.rect.x + 10, self.rect.y + 60))
         
-        avg_health = population.calculate_average_health()
         text = self.screen.graphics.small_font.render(f"Avg Health: {avg_health:.1f}", True, self.screen.graphics.colors['text'])
         self.screen.graphics.screen.blit(text, (self.rect.x + 10, self.rect.y + 80))
         

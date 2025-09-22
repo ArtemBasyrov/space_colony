@@ -192,11 +192,11 @@ class Population:
         
         # Death chance - increased by resource shortages
         if severe_shortage:
-            death_chance = 0.6  # Very high chance of death during shortages
+            death_chance = 0.4  # Very high chance of death during shortages
         elif avg_health < 20:
-            death_chance = 0.4
-        elif avg_health < 40:
             death_chance = 0.2
+        elif avg_health < 40:
+            death_chance = 0.1
             
         # Handle births
         if birth_chance > 0 and random.random() < birth_chance and self.count < self.max_population:
@@ -250,10 +250,20 @@ class Population:
             colonist.health = max(0, min(100, colonist.health))
 
     def update_health(self, buildings):
-        """Apply health boosts from hospital"""
-        for building in buildings:
-            if hasattr(building, 'calculate_health_boost'):
-                health_boost = building.calculate_health_boost()
-
-                for c in self.colonists:
-                    c.health = min(100, c.health + health_boost)
+        """Apply health boosts from hospitals, scaled by population"""
+        # Get all hospitals
+        hospitals = [b for b in buildings if hasattr(b, 'calculate_health_boost')]
+        
+        if not hospitals:
+            return  # No hospitals, no health boost
+            
+        total_population = self.count
+        
+        # Calculate total health boost from all hospitals
+        total_health_boost = 0
+        for hospital in hospitals:
+            total_health_boost += hospital.calculate_health_boost(total_population)
+        
+        # Apply health boost to all colonists
+        for colonist in self.colonists:
+            colonist.health = min(100, colonist.health + total_health_boost)

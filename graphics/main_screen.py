@@ -1,3 +1,4 @@
+# main_screen.py
 import pygame
 from .screen import Screen
 from .hex_map import HexMap
@@ -13,12 +14,26 @@ class MainScreen(Screen):
         super().__init__(graphics)
         self.calculated_changes = {}
         
-        # Create hex map with proper positioning
-        self.hex_map = HexMap(20, 100, 800, 400, 35)
+        # Calculate new dimensions for the expanded map
+        top_bar_height = 80     # Height of top bar
+        bottom_bar_height = 100 # Height of bottom bar
+        
+        # Side panels will be on the right, calculate their total width
+        side_panel_width = 250  # Width of each side panel
+        
+        # New map dimensions to take up all space between top and bottom bars
+        # and all horizontal space except for the right side panels
+        map_x = 20  # Left margin
+        map_y = top_bar_height + 20    # Below top bar with margin
+        map_width = self.graphics.width - side_panel_width - 10  # Account for right panels and margins
+        map_height = self.graphics.height - top_bar_height - bottom_bar_height - 40
+        
+        # Create hex map with new dimensions
+        self.hex_map = HexMap(map_x, map_y, map_width, map_height, 35)
         self.hex_map.game = self.game  # Pass game reference to hex map
         self.hex_map.place_buildings(self.game.buildings)
         
-        # Create UI components - pass self (the screen instance) instead of graphics
+        # Create UI components
         self.top_bar = TopBar(graphics)
         self.bottom_bar = BottomBar(graphics)
         self.building_menu = BuildingMenu(self)
@@ -28,15 +43,18 @@ class MainScreen(Screen):
         # Track if we've already handled a click in this frame
         self.click_handled = False
     
+    # main_screen.py - update the calculate_next_day_changes method
     def calculate_next_day_changes(self):
         """Calculate expected resource changes for the next day"""
-        # Reset changes
+        # Reset changes with new resources
         self.calculated_changes = {
             'oxygen': 0,
             'food': 0,
-            'minerals': 0,
+            'regolith': 0,  # Changed from minerals
             'energy': 0,
-            'credits': 0
+            'credits': 0,
+            'hydrogen': 0,      # New resource
+            'fuel': 0           # New resource
         }
         
         pop = self.game.population
@@ -93,7 +111,7 @@ class MainScreen(Screen):
             
             # Finally check if click is on the map (only if not already handled)
             if not self.click_handled:
-                map_rect = pygame.Rect(20, 100, 800, 400)
+                map_rect = pygame.Rect(self.hex_map.x, self.hex_map.y, self.hex_map.width, self.hex_map.height)
                 if map_rect.collidepoint(event.pos):
                     hexagon = self.hex_map.handle_click(event.pos)
                     if hexagon and hexagon.building:
@@ -159,7 +177,7 @@ class MainScreen(Screen):
                 if unemployed:
                     colonist = unemployed[0]
                     if building.assign_colonist(colonist):
-                        self.graphics.show_message(f"Assigned {colonist.id} to {building.name}")
+                        self.graphics.show_message(f"Assigned colonist to {building.name}")
                         # Publish worker added event
                         self.game.event_manager.publish(GameEvent(
                             EventType.BUILDING_WORKER_ADDED,

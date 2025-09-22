@@ -10,6 +10,8 @@ class MarketScreen(Screen):
         self.price_chart_visible = False
         self.input_rect = pygame.Rect(30, 230, 200, 40)
         self.show_market_info = False
+        self.width = graphics.width-40
+        self.n_rows = 1
     
     def on_button_click(self, action):
         """Handle button clicks in market screen"""
@@ -80,7 +82,7 @@ class MarketScreen(Screen):
                 if len(self.custom_amount) < 6:
                     self.custom_amount += event.unicode
     
- # market_screen.py - update the draw method
+    # market_screen.py - update the draw method
     def draw(self):
         """Draw the market screen"""
         # Background
@@ -91,13 +93,15 @@ class MarketScreen(Screen):
         self.graphics.screen.blit(title_text, (20, 20))
         
         # Market prices panel
-        self.draw_panel(20, 70, 984, 400, "Market Trading")
         tradable = self.game.market.get_tradable_resources()
+        self.n_rows = (len(tradable) + 1) // 2
+        self.draw_panel(20, 70, self.width, 360 + self.n_rows*45, "Market Trading")
+        
         
         # Draw resource selection buttons WITH ICONS
         for i, resource in enumerate(tradable):
             x = 30 + (i % 2) * 480
-            y = 110
+            y = 110 + (i // 2) * 45
             
             # Resource selection button
             button_color = self.graphics.colors['button_hover'] if resource == self.selected_resource else self.graphics.colors['button']
@@ -132,7 +136,7 @@ class MarketScreen(Screen):
             self.draw_selected_resource_panel()
         
         # Back button
-        self.draw_button(40, 490, 150, 40, "Back", "back")
+        self.draw_button(40, 440 + self.n_rows*45, 150, 40, "Back", "back")
 
     def draw_selected_resource_panel(self):
         """Draw trading panel for selected resource"""
@@ -143,11 +147,13 @@ class MarketScreen(Screen):
         available = getattr(self.game.resources, resource)
         
         # Selected resource info
-        self.draw_panel(20, 160, 984, 200, f"Trading: {resource.capitalize()}")
-        
+        self.draw_panel(20, 130+self.n_rows*40, self.width, 200, f"Trading: {resource.capitalize()}")
+        panel_y = 200 + self.n_rows*40
+        self.input_rect = pygame.Rect(30, panel_y, 200, 40)
+
         # Price info
         info_text = self.graphics.normal_font.render(f"Buy Price: {buy_price:.2f} | Sell Price: {sell_price:.2f} | You have: {available:.1f}", True, self.graphics.colors['text'])
-        self.graphics.screen.blit(info_text, (30, 200))
+        self.graphics.screen.blit(info_text, (30, panel_y-30))
         
         # Input field
         pygame.draw.rect(self.graphics.screen, (50, 60, 80), self.input_rect, border_radius=3)
@@ -166,39 +172,39 @@ class MarketScreen(Screen):
             pygame.draw.rect(self.graphics.screen, self.graphics.colors['success'], self.input_rect, 2, border_radius=3)
         
         # Clear input button
-        self.draw_button(240, 230, 80, 40, "Clear", "clear_input")
+        self.draw_button(240, panel_y, 80, 40, "Clear", "clear_input")
         
         # Buy/Sell buttons
-        self.draw_button(350, 230, 100, 40, "Buy 10", "buy_10")
-        self.draw_button(460, 230, 100, 40, "Sell 10", "sell_10")
+        self.draw_button(350, panel_y, 100, 40, "Buy 10", "buy_10")
+        self.draw_button(460, panel_y, 100, 40, "Sell 10", "sell_10")
         
         if self.custom_amount:
             try:
                 amount = int(self.custom_amount)
                 if amount > 0:
-                    self.draw_button(350, 280, 100, 40, f"Buy {amount}", "buy_custom")
-                    self.draw_button(460, 280, 100, 40, f"Sell {amount}", "sell_custom")
+                    self.draw_button(350, panel_y+50, 100, 40, f"Buy {amount}", "buy_custom")
+                    self.draw_button(460, panel_y+50, 100, 40, f"Sell {amount}", "sell_custom")
             except ValueError:
                 pass
         
         # Chart and info toggle buttons (moved to the right side)
         chart_button_text = "Hide Price Chart" if self.price_chart_visible else "Show Price Chart"
-        self.draw_button(580, 230, 150, 40, chart_button_text, "toggle_chart")
+        self.draw_button(580, panel_y, 150, 40, chart_button_text, "toggle_chart")
         
         info_button_text = "Hide Market Info" if self.show_market_info else "Show Market Info"
-        self.draw_button(740, 230, 150, 40, info_button_text, "toggle_market_info")
+        self.draw_button(740, panel_y, 150, 40, info_button_text, "toggle_market_info")
         
         # Draw price chart if enabled
         if self.price_chart_visible:
-            self.draw_price_chart(resource)
+            self.draw_price_chart(resource, panel_y)
             
         # Draw market information if enabled
         if self.show_market_info:
-            self.draw_market_info(resource)
+            self.draw_market_info(resource, panel_y)
     
-    def draw_market_info(self, resource):
+    def draw_market_info(self, resource, panel_y):
         """Draw market information and player influence"""
-        info_panel_rect = pygame.Rect(30, 280, 924, 150)
+        info_panel_rect = pygame.Rect(30, panel_y+60, 924, 150)
         pygame.draw.rect(self.graphics.screen, (40, 50, 70), info_panel_rect, border_radius=5)
         pygame.draw.rect(self.graphics.screen, self.graphics.colors['highlight'], info_panel_rect, 1, border_radius=5)
         
@@ -238,9 +244,9 @@ class MarketScreen(Screen):
             text = self.graphics.small_font.render(influence_text, True, color)
             self.graphics.screen.blit(text, (info_panel_rect.x + 20, y_offset + 10))
     
-    def draw_price_chart(self, resource):
+    def draw_price_chart(self, resource, panel_y):
         """Draw price history chart for selected resource"""
-        chart_panel_rect = pygame.Rect(30, 280, 924, 150)
+        chart_panel_rect = pygame.Rect(30, panel_y+60, 924, 150)
         pygame.draw.rect(self.graphics.screen, (40, 50, 70), chart_panel_rect, border_radius=5)
         pygame.draw.rect(self.graphics.screen, self.graphics.colors['highlight'], chart_panel_rect, 1, border_radius=5)
         

@@ -1,11 +1,13 @@
+# hex_map.py
 import pygame
 import math
+import random
 from .hexagon import Hexagon
 
 class HexMap:
-    def __init__(self, x, y, width, height, hex_size=35):  # Added x, y position parameters
-        self.x = x  # Top-left x position of the map area
-        self.y = y  # Top-left y position of the map area
+    def __init__(self, x, y, width, height, hex_size=35):
+        self.x = x
+        self.y = y
         self.width = width
         self.height = height
         self.hex_size = hex_size
@@ -14,18 +16,37 @@ class HexMap:
         self.create_map()
     
     def create_map(self):
-        """Create a grid of hexagons"""
+        """Create a grid of hexagons with varied surfaces and elevations"""
         self.hexagons = []
         hex_width = self.hex_size * math.sqrt(3)
         hex_height = self.hex_size * 1.5
         
-        # Calculate starting position to center the map in its area
-        map_center_x = self.x + self.width / 2
-        map_center_y = self.y + self.height / 2
-        
         # Calculate how many rows and columns fit in the available space
         max_cols = int(self.width / hex_width) - 1
         max_rows = int(self.height / hex_height) - 1
+        
+        # Generate elevation map first
+        elevation_map = self.generate_elevation_map(max_cols, max_rows)
+        
+        # Generate surface map based on elevation
+        surface_map = self.generate_surface_map(max_cols, max_rows, elevation_map)
+        
+        # Ensure at least 3 ice hexes
+        self.ensure_minimum_ice(surface_map, elevation_map, max_cols, max_rows, 3)
+        
+        # Ensure no completely inaccessible hexes
+        self.ensure_accessibility(elevation_map, max_cols, max_rows)
+        
+        # Ensure at least 3 regolith hexes for initial mine placement
+        self.ensure_minimum_regolith(surface_map, max_cols, max_rows, 3)
+        
+        # Calculate total map dimensions to center the grid
+        total_map_width = (max_cols - 0.5) * hex_width
+        total_map_height = (max_rows-2) * hex_height + self.hex_size * 2
+        
+        # Calculate offset to center the map within the panel
+        offset_x = (self.width - total_map_width) / 2
+        offset_y = (self.height - total_map_height) / 2 
         
         for row in range(max_rows):
             for col in range(max_cols):
@@ -36,15 +57,154 @@ class HexMap:
                 if row % 2 == 1:
                     x += hex_width / 2
                 
-                # Center the map within its area
-                total_map_width = (max_cols - 0.5) * hex_width
-                total_map_height = max_rows * hex_height
+                # Position within the map area with centering
+                x += self.x + offset_x
+                y += self.y + offset_y
                 
-                x += self.x + (self.width - total_map_width) / 2
-                y += self.y + (self.height - total_map_height) / 2
+                # Get surface type and elevation from our generated maps
+                surface_type = surface_map[row][col]
+                elevation = elevation_map[row][col]
                 
-                hexagon = Hexagon(x, y, self.hex_size, col, row)
+                hexagon = Hexagon(x, y, self.hex_size, col, row, surface_type, elevation)
                 self.hexagons.append(hexagon)
+    
+    def ensure_minimum_regolith(self, surface_map, cols, rows, min_regolith):
+        """Ensure there are at least min_regolith regolith hexes on the map"""
+        regolith_count = sum(1 for row in surface_map for cell in row if cell == "regolith")
+        
+        if regolith_count < min_regolith:
+            # Find cells that aren't already regolith
+            non_regolith_cells = []
+            for row in range(rows):
+                for col in range(cols):
+                    if surface_map[row][col] != "regolith":
+                        non_regolith_cells.append((row, col))
+            
+            # Convert some to regolith
+            needed = min_regolith - regolith_count
+            if needed > 0 and non_regolith_cells:
+                # Convert the needed number of cells
+                for _ in range(min(needed, len(non_regolith_cells))):
+                    row, col = random.choice(non_regolith_cells)
+                    surface_map[row][col] = "regolith"
+                    non_regolith_cells.remove((row, col))
+    
+    def generate_elevation_map(self, cols, rows):
+        """Generate a map with more frequent elevation changes"""
+        # Create multiple noise layers for more varied elevation
+        noise_layers = []
+        for i in range(3):  # Three layers of noise
+            scale = 2 ** i  # Different scales for each layer
+            noise_map = [[random.random() * scale for _ in range(cols)] for _ in range(rows)]
+            noise_layers.append(noise_map)
+        
+        # Combine noise layers
+        combined = [[0 for _ in range(cols)] for _ in range(rows)]
+        for row in range(rows):
+            for col in range(cols):
+                total = 0
+                for layer in noise_layers:
+                    total += layer[row][col]
+                combined[row][col] = total / len(noise_layers)
+        
+        # Normalize to 0-1 range
+        min_val = min(min(row) for row in combined)
+        max_val = max(max(row) for row in combined)
+        normalized = [[(val - min_val) / (max_val - min_val) for val in row] for row in combined]
+        
+        # Convert to elevation levels (0, 1, 2) with more frequent changes
+        elevation_map = [[0 for _ in range(cols)] for _ in range(rows)]
+        for row in range(rows):
+            for col in range(cols):
+                if normalized[row][col] < 0.3:
+                    elevation_map[row][col] = 0  # Low
+                elif normalized[row][col] < 0.6:
+                    elevation_map[row][col] = 1  # Medium
+                else:
+                    elevation_map[row][col] = 2  # High
+        
+        return elevation_map
+    
+    def generate_surface_map(self, cols, rows, elevation_map):
+        """Generate surface map based on elevation"""
+        surface_map = [["regolith" for _ in range(cols)] for _ in range(rows)]
+        
+        for row in range(rows):
+            for col in range(cols):
+                elevation = elevation_map[row][col]
+                
+                # Higher elevation is more likely to be stone
+                if elevation == 2:  # High elevation
+                    surface_map[row][col] = "stone"
+                elif elevation == 0:  # Low elevation
+                    if random.random() < 0.3:  # 30% chance for ice at low elevation
+                        surface_map[row][col] = "ice"
+                elif elevation == 1:  # Medium elevation
+                    if random.random() < 0.6:  # 60% chance for stone at medium elevation
+                        surface_map[row][col] = "stone"
+        
+        return surface_map
+    
+    def ensure_minimum_ice(self, surface_map, elevation_map, cols, rows, min_ice):
+        """Ensure there are at least min_ice ice hexes on the map"""
+        ice_count = sum(1 for row in surface_map for cell in row if cell == "ice")
+        
+        if ice_count < min_ice:
+            # Find low elevation cells that aren't already ice
+            low_elevation_cells = []
+            for row in range(rows):
+                for col in range(cols):
+                    if elevation_map[row][col] == 0 and surface_map[row][col] != "ice":
+                        low_elevation_cells.append((row, col))
+            
+            # Convert some to ice
+            needed = min_ice - ice_count
+            if needed > 0 and low_elevation_cells:
+                # Convert the needed number of cells
+                for _ in range(min(needed, len(low_elevation_cells))):
+                    row, col = random.choice(low_elevation_cells)
+                    surface_map[row][col] = "ice"
+                    low_elevation_cells.remove((row, col))
+    
+    def ensure_accessibility(self, elevation_map, cols, rows):
+        """Ensure no hexes are completely inaccessible"""
+        directions = [
+            (0, -1), (1, 0), (0, 1), 
+            (-1, 1), (-1, 0), (-1, -1),
+        ]
+        
+        # Check each hex and fix if completely inaccessible
+        for row in range(rows):
+            for col in range(cols):
+                current_elevation = elevation_map[row][col]
+                inaccessible_count = 0
+                
+                # Count inaccessible neighbors
+                for dx, dy in directions:
+                    n_row, n_col = row + dy, col + dx
+                    if 0 <= n_row < rows and 0 <= n_col < cols:
+                        neighbor_elevation = elevation_map[n_row][n_col]
+                        if abs(current_elevation - neighbor_elevation) >= 2:
+                            inaccessible_count += 1
+                    else:
+                        inaccessible_count += 1  # Edge of map is inaccessible
+                
+                # If all sides are inaccessible, adjust elevation
+                if inaccessible_count >= 6:
+                    # Find the most common elevation among neighbors
+                    neighbor_elevations = []
+                    for dx, dy in directions:
+                        n_row, n_col = row + dy, col + dx
+                        if 0 <= n_row < rows and 0 <= n_col < cols:
+                            neighbor_elevations.append(elevation_map[n_row][n_col])
+                    
+                    if neighbor_elevations:
+                        # Set to the most common neighbor elevation
+                        most_common = max(set(neighbor_elevations), key=neighbor_elevations.count)
+                        elevation_map[row][col] = most_common
+                    else:
+                        # If no neighbors (shouldn't happen), set to medium elevation
+                        elevation_map[row][col] = 1
     
     def get_hex_at_position(self, pos):
         """Get the hexagon at a given screen position"""
@@ -53,27 +213,67 @@ class HexMap:
                 return hexagon
         return None
     
+    def get_neighbor_elevations(self, hexagon):
+        """Get elevations of all neighbors for a hexagon"""
+        directions = [
+            (0, -1), (1, 0), (0, 1), 
+            (-1, 1), (-1, 0), (-1, -1),
+        ]
+        
+        neighbor_elevations = []
+        for dx, dy in directions:
+            neighbor = None
+            # For flat-top hexagons, the neighbor calculation depends on whether the row is odd or even
+            if (hexagon.map_y) % 2 == 1:  # odd row
+                # Adjust x coordinate for odd rows
+                adj_dx = dx
+                if dy == 1 or dy == -1:
+                    adj_dx = dx + 1
+                neighbor = self.get_hex_at_grid(hexagon.map_x + adj_dx, hexagon.map_y + dy)
+            else:  # Even row
+                neighbor = self.get_hex_at_grid(hexagon.map_x + dx, hexagon.map_y + dy)
+                
+            if neighbor:
+                neighbor_elevations.append(neighbor.elevation)
+            else:
+                neighbor_elevations.append(None)
+                
+        return neighbor_elevations
+    
     def place_buildings(self, buildings):
         """Place initial buildings on the map"""
         # Clear existing buildings
         for hexagon in self.hexagons:
             hexagon.building = None
         
-        # Place buildings in specific positions (centered)
+        # Find all regolith hexes for mine placement
+        regolith_hexes = [hex for hex in self.hexagons if hex.surface_type == "regolith"]
+        
+        # Place buildings in specific positions, ensuring mine is on regolith
         building_positions = [
-            (3, 2),  # Mine
-            (5, 2),  # Energy Generator
-            (7, 2),  # Oxygen Generator
-            (4, 4),  # Hydroponic Farm
-            (6, 4),  # Hospital
-            (4, 3),  # Habitat
+            (3, 2, "Mine"),          # Mine - must be on regolith
+            (5, 2, "EnergyGenerator"),  # Energy Generator
+            (7, 2, "OxygenGenerator"),  # Oxygen Generator
+            (4, 4, "HydroponicFarm"),   # Hydroponic Farm
+            (6, 4, "Hospital"),         # Hospital
+            (4, 3, "HabitatBlock"),     # Habitat
         ]
         
-        for i, (col, row) in enumerate(building_positions):
+        for i, (col, row, building_type) in enumerate(building_positions):
             if i < len(buildings):
-                hexagon = self.get_hex_at_grid(col, row)
-                if hexagon:
-                    hexagon.place_building(buildings[i])
+                # For mine, find a regolith hex near the target position
+                if building_type == "Mine" and regolith_hexes:
+                    # Find the closest regolith hex to the target position
+                    target_x, target_y = col, row
+                    closest_hex = min(regolith_hexes, key=lambda h: 
+                                    abs(h.map_x - target_x) + abs(h.map_y - target_y))
+                    closest_hex.place_building(buildings[i])
+                    regolith_hexes.remove(closest_hex)  # Remove from available regolith hexes
+                else:
+                    # For other buildings, use the specified position
+                    hexagon = self.get_hex_at_grid(col, row)
+                    if hexagon:
+                        hexagon.place_building(buildings[i])
     
     def get_hex_at_grid(self, col, row):
         """Get hexagon at grid coordinates"""
@@ -82,7 +282,7 @@ class HexMap:
                 return hexagon
         return None
     
-    # hex_map.py - update the draw method to show cancellation hint
+    # hex_map.py - update the draw method and handle_click method
     def draw(self, screen, colors, fonts):
         """Draw the entire hex map"""
         # Draw map background
@@ -98,30 +298,65 @@ class HexMap:
             
             # Instruction text
             instruction_font = fonts['normal']
-            instruction_text = instruction_font.render("Click on an empty hexagon to place building", True, (255, 255, 255))
-            text_rect = instruction_text.get_rect(center=(self.x + self.width // 2, self.y + 20))
+            
+            # Get building info for placement requirements
+            building_type = self.game.selected_building_type
+            required_surface = None
+            if building_type:
+                from buildings import get_building_required_surface
+                required_surface = get_building_required_surface(building_type)
+            
+            if required_surface:
+                instruction_text = instruction_font.render(f"Click on a {required_surface} hexagon to place building. Press ESC to cancel construction", True, (255, 255, 255))
+            else:
+                instruction_text = instruction_font.render("Click on an empty hexagon to place building. Press ESC to cancel construction", True, (255, 255, 255))
+                
+            text_rect = instruction_text.get_rect(center=(self.x + self.width // 2, self.y+self.height - 20))
             pygame.draw.rect(screen, (0, 0, 0, 180), text_rect.inflate(20, 10), border_radius=5)
             screen.blit(instruction_text, text_rect)
             
-            # Cancel instruction
-            cancel_text = instruction_font.render("Press ESC to cancel construction", True, (255, 255, 255))
-            cancel_rect = cancel_text.get_rect(center=(self.x + self.width // 2, self.y + 45))
-            pygame.draw.rect(screen, (0, 0, 0, 180), cancel_rect.inflate(20, 10), border_radius=5)
-            screen.blit(cancel_text, cancel_rect)
         
-        # Draw all hexagons
+        # Draw all hexagons with their neighbor elevations
         for hexagon in self.hexagons:
             selected = (hexagon == self.selected_hex)
+            neighbor_elevations = self.get_neighbor_elevations(hexagon)
+            
             # Highlight empty hexagons in construction mode
-            construction_highlight = (self.game.construction_mode and not hexagon.building) if hasattr(self, 'game') else False
+            construction_highlight = False
+            construction_valid = False
+            
+            if hasattr(self, 'game') and self.game.construction_mode and not hexagon.building:
+                construction_highlight = True
+                
+                # Check if this hexagon is valid for the selected building
+                building_type = self.game.selected_building_type
+                if building_type:
+                    from buildings import get_building_required_surface
+                    required_surface = get_building_required_surface(building_type)
+                    
+                    if required_surface:
+                        # Building has surface requirement
+                        construction_valid = (hexagon.surface_type == required_surface)
+                    else:
+                        # No surface requirement - always valid
+                        construction_valid = True
             
             if construction_highlight:
-                # Use a special color for available construction sites
-                hexagon.draw(screen, colors, fonts, True)
-                # Draw a green outline around available hexagons
-                pygame.draw.polygon(screen, (0, 255, 0), hexagon.vertices, 3)
+                if construction_valid:
+                    # Valid construction site - use normal highlighting
+                    hexagon.draw(screen, colors, fonts, True, neighbor_elevations)
+                    # Draw a green outline around available hexagons
+                    pygame.draw.polygon(screen, (0, 255, 0), hexagon.vertices, 3)
+                else:
+                    # Invalid construction site - draw with red tint
+                    #overlay = pygame.Surface((hexagon.rect.width, hexagon.rect.height), pygame.SRCALPHA)
+                    #overlay.fill((255, 0, 0, 60))  # Red tint for invalid placement
+                    #screen.blit(overlay, hexagon.rect.topleft)
+                    hexagon.draw(screen, colors, fonts, False, neighbor_elevations)
+                    # Draw a red outline
+                    pygame.draw.polygon(screen, (255, 0, 0), hexagon.vertices, 3)
             else:
-                hexagon.draw(screen, colors, fonts, selected)
+                hexagon.draw(screen, colors, fonts, selected, neighbor_elevations)
     
     def handle_click(self, pos):
         """Handle mouse click on the map"""
@@ -133,8 +368,24 @@ class HexMap:
             # If in construction mode, place building instead of selecting
             if hasattr(self, 'game') and self.game.construction_mode and self.game.selected_building_type:
                 if hexagon and not hexagon.building:
-                    self.place_new_building(hexagon)
-                    return None  # Don't return the hexagon for selection
+                    # Check if the hexagon is valid for the selected building type
+                    building_type = self.game.selected_building_type
+                    from buildings import get_building_required_surface, get_building_name
+                    required_surface = get_building_required_surface(building_type)
+                    
+                    if required_surface and hexagon.surface_type != required_surface:
+                        self.game.graphics.show_message(f"{get_building_name(building_type)} can only be built on {required_surface} surfaces!")
+                        return None
+                    
+                    # Check if the hexagon is accessible
+                    neighbor_elevations = self.get_neighbor_elevations(hexagon)
+                    accessible_sides = hexagon.get_accessible_sides(neighbor_elevations)
+                    
+                    if any(accessible_sides):  # At least one side is accessible
+                        self.place_new_building(hexagon)
+                    else:
+                        self.game.graphics.show_message("This location is not accessible!")
+                    return None
                 elif hexagon and hexagon.building:
                     self.game.graphics.show_message("This hexagon already has a building!")
                     return None
@@ -145,7 +396,7 @@ class HexMap:
 
     def place_new_building(self, hexagon):
         """Place a new building on the selected hexagon"""
-        from buildings import create_building_from_name
+        from buildings import create_building_from_name, get_building_name
         
         building = create_building_from_name(self.game.selected_building_type)
         if building:
@@ -158,6 +409,6 @@ class HexMap:
             self.game.selected_building_type = None
             self.game.pending_construction = None
             
-            self.game.graphics.show_message(f"{building_type} constructed successfully!")
+            self.game.graphics.show_message(f"{get_building_name(building_type)} constructed successfully!")
         else:
             self.game.graphics.show_message("Error: Could not create building!")
