@@ -1,9 +1,9 @@
 import pygame
 
 class PopulationPanel:
-    def __init__(self, screen):
+    def __init__(self, screen, x, y, width, height):
         self.screen = screen
-        self.rect = pygame.Rect(840, 100, 164, 150)
+        self.rect = pygame.Rect(x, y, width, height)
     
     # population_panel.py - update to show individual stats
     def draw(self, population):

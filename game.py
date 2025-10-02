@@ -4,6 +4,7 @@ from resources import ResourceManager
 from population import Population
 from buildings import Mine, EnergyGenerator, OxygenGenerator, HydroponicFarm, Hospital, HabitatBlock
 from market import Market
+from stock_market import StockMarket 
 from graphics import Graphics
 from events.event_system import EventManager
 from events import EventType, GameEvent
@@ -25,6 +26,7 @@ class Game:
             HabitatBlock()
         ]
         self.market = Market()
+        self.stock_market = StockMarket(self.market, self.resources)
         self.day = 1
         self.event_manager = EventManager()  # Add event manager
 
@@ -40,6 +42,7 @@ class Game:
         self.resources.update(self.population, self.buildings)
         self.population.update(self.resources, self.buildings)
         self.market.update_market()
+        self.stock_market.update_market(self.day)
         self.day += 1
         
         # Publish day advanced event

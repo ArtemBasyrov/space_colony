@@ -19,6 +19,8 @@ class Market:
         
         # Price history for charts
         self.price_history = {resource: [] for resource in self.base_prices.keys()}
+        for resource in self.prices:
+            self.price_history[resource].append(self.prices[resource])
         
         # Market depth - simulates other traders in the market
         self.market_depth = {
@@ -29,7 +31,16 @@ class Market:
             'fuel': 3000
         }
         
-        # Player influence tracking
+        # Player influence tracking (for next day's price changes)
+        self.next_day_influence = {
+            'regolith': {'buy_impact': 0, 'sell_impact': 0},
+            'food': {'buy_impact': 0, 'sell_impact': 0},
+            'oxygen': {'buy_impact': 0, 'sell_impact': 0},
+            'hydrogen': {'buy_impact': 0, 'sell_impact': 0},
+            'fuel': {'buy_impact': 0, 'sell_impact': 0}
+        }
+        
+        # Player transaction history (for display/info purposes)
         self.player_transactions = {
             'regolith': {'bought': 0, 'sold': 0},
             'food': {'bought': 0, 'sold': 0},
@@ -55,17 +66,30 @@ class Market:
         self.sell_fee = 0.9    # 10% fee
         
     def update_market(self):
-        """Update market prices and record history"""
-        # Apply market recovery (prices tend toward equilibrium)
+        """Update market prices and record history - APPLY PLAYER INFLUENCE HERE"""
+        # Apply player influence from previous day's transactions
         for resource in self.prices:
-            # Calculate price difference from base
+            # Apply buy impact (increases prices)
+            if self.next_day_influence[resource]['buy_impact'] > 0:
+                price_impact = self.next_day_influence[resource]['buy_impact']
+                self.prices[resource] = self.prices[resource] * (1 + price_impact)
+            
+            # Apply sell impact (decreases prices)
+            if self.next_day_influence[resource]['sell_impact'] > 0:
+                price_impact = self.next_day_influence[resource]['sell_impact']
+                self.prices[resource] = max(self.prices[resource] * (1 - price_impact), 
+                                           self.base_prices[resource] * 0.01)  # Floor at 1% of base price
+            
+            # Reset next day influence for new transactions
+            self.next_day_influence[resource] = {'buy_impact': 0, 'sell_impact': 0}
+            
+            # Apply market recovery (prices tend toward equilibrium)
             price_diff = self.base_prices[resource] - self.prices[resource]
-            # Apply recovery (prices move toward base price)
             self.prices[resource] += price_diff * self.recovery_rate
             
             # Add natural market fluctuations
             natural_change = random.uniform(1 - self.volatility, 1 + self.volatility)
-            self.prices[resource] = max(0.01, self.prices[resource] * natural_change)  # Minimum 1% of base price
+            self.prices[resource] = max(0.01, self.prices[resource] * natural_change)
             
         # Record current prices in history
         for resource in self.prices:
@@ -81,24 +105,22 @@ class Market:
             self.player_transactions[resource]['bought'] *= 0.9  # Decay by 10% daily
             self.player_transactions[resource]['sold'] *= 0.9
             
-    def apply_player_influence(self, resource, amount, is_buying):
-        """Apply price changes based on player transactions - EXTREME capitalism edition"""
+    def queue_player_influence(self, resource, amount, is_buying):
+        """Queue price changes for the next day based on player transactions"""
         if resource not in self.prices:
             return
         
-        # Update transaction tracking
+        # Update transaction tracking (for display/info)
         if is_buying:
             self.player_transactions[resource]['bought'] += amount
-            # Buying increases demand, which increases prices
+            # Queue buy impact for next day
             price_impact = amount * self.elasticity[resource]
-            self.prices[resource] = self.prices[resource] * (1 + price_impact)
-            # No upper limit - prices can go to infinity!
+            self.next_day_influence[resource]['buy_impact'] += price_impact
         else:
             self.player_transactions[resource]['sold'] += amount
-            # Selling increases supply, which decreases prices
+            # Queue sell impact for next day
             price_impact = amount * self.elasticity[resource]
-            self.prices[resource] = max(self.prices[resource] * (1 - price_impact), 
-                                       self.base_prices[resource] * 0.01)  # Floor at 1% of base price
+            self.next_day_influence[resource]['sell_impact'] += price_impact
     
     def get_player_influence_factor(self, resource):
         """Calculate how much influence the player has on the market"""
@@ -117,13 +139,13 @@ class Market:
         if resource not in self.prices:
             return 0, 0
             
-        # Calculate cost with 10% markup
+        # Calculate cost with 10% markup (using current day's prices)
         cost = amount * self.prices[resource] * self.buy_markup
         cost = round(cost, 2)
         
         if credits >= cost:
-            # Apply player influence to market prices
-            self.apply_player_influence(resource, amount, True)
+            # Queue player influence for next day (doesn't affect current prices)
+            self.queue_player_influence(resource, amount, True)
             return amount, cost
         else:
             # Can only buy what you can afford
@@ -132,8 +154,8 @@ class Market:
             cost = round(cost, 2)
             
             if affordable_amount > 0:
-                # Apply player influence for the actual purchase
-                self.apply_player_influence(resource, affordable_amount, True)
+                # Queue player influence for next day
+                self.queue_player_influence(resource, affordable_amount, True)
             return affordable_amount, cost
             
     def sell_resource(self, resource, amount, available):
@@ -146,8 +168,8 @@ class Market:
         revenue = round(revenue, 2)
         
         if sellable_amount > 0:
-            # Apply player influence to market prices
-            self.apply_player_influence(resource, sellable_amount, False)
+            # Queue player influence for next day (doesn't affect current prices)
+            self.queue_player_influence(resource, sellable_amount, False)
         
         return sellable_amount, revenue
         
@@ -175,5 +197,5 @@ class Market:
             'player_influence': influence,
             'market_depth': self.market_depth[resource],
             'buy_markup': self.buy_markup,
-            'sell_fee': self.sell_fee
+            'sell_fee': self.sell_fee,
         }

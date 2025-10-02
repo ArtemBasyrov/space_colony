@@ -1,4 +1,4 @@
-# construction_screen.py
+# construction_screen.py - updated version
 import pygame
 from .screen import Screen
 from buildings import get_building_price, create_building_from_name, BUILDING_CATALOG, get_building_name, get_building_description, get_building_required_surface
@@ -9,6 +9,7 @@ class ConstructionScreen(Screen):
         self.selected_building = None
         self.scroll_offset = 0
         self.max_visible_buildings = 4  # Number of buildings that can fit in the visible area
+        self.removal_mode = False  # New: track if we're in removal mode
         
     def on_button_click(self, action):
         """Handle button clicks in construction screen"""
@@ -18,9 +19,13 @@ class ConstructionScreen(Screen):
         elif action.startswith("select_"):
             building_type = action.split("_")[1]
             self.selected_building = building_type
+            self.removal_mode = False  # Exit removal mode when selecting a building
             
         elif action == "confirm_purchase" and self.selected_building:
             self.purchase_building()
+            
+        elif action == "enter_removal_mode":
+            self.enter_removal_mode()
             
         elif action == "scroll_up":
             self.scroll_offset = max(0, self.scroll_offset - 1)
@@ -28,6 +33,20 @@ class ConstructionScreen(Screen):
         elif action == "scroll_down":
             max_offset = max(0, len(BUILDING_CATALOG) - self.max_visible_buildings)
             self.scroll_offset = min(max_offset, self.scroll_offset + 1)
+    
+    def enter_removal_mode(self):
+        """Enter building removal mode"""
+        removal_cost = 200
+        
+        if self.game.resources.credits >= removal_cost:
+            self.removal_mode = True
+            self.game.construction_mode = True
+            self.game.selected_building_type = "REMOVAL"
+            
+            self.graphics.show_message(f"Removal mode activated. Click on a building to remove it for {removal_cost} credits. Press ESC to cancel.")
+            self.graphics.set_screen('main')
+        else:
+            self.graphics.show_message(f"Not enough credits! Building removal costs {removal_cost} credits.")
     
     def purchase_building(self):
         """Purchase the selected building"""
@@ -243,6 +262,33 @@ class ConstructionScreen(Screen):
             
             # Store button for click detection
             self.buttons["confirm_purchase"] = button_rect
+        
+        # Building removal button
+        removal_cost = 200
+        removal_button_text = f"Remove Building for {removal_cost}"
+        text_width = self.graphics.normal_font.size(removal_button_text)[0]
+        removal_button_width = text_width + 60
+        
+        removal_button_rect = pygame.Rect(self.graphics.width-40-removal_button_width , 620, removal_button_width, 40)
+        removal_hover = removal_button_rect.collidepoint(pygame.mouse.get_pos())
+        
+        # Draw removal button
+        removal_color = self.graphics.colors['button_hover'] if removal_hover else self.graphics.colors['button']
+        pygame.draw.rect(self.graphics.screen, removal_color, removal_button_rect, border_radius=3)
+        pygame.draw.rect(self.graphics.screen, self.graphics.colors['highlight'], removal_button_rect, 1, border_radius=3)
+        
+        # Draw removal button text
+        removal_text_surf = self.graphics.normal_font.render(removal_button_text, True, self.graphics.colors['button_text'])
+        removal_text_rect = removal_text_surf.get_rect(center=(removal_button_rect.centerx + 10, removal_button_rect.centery))
+        self.graphics.screen.blit(removal_text_surf, removal_text_rect)
+        
+        # Draw credits icon for removal
+        if 'credits' in self.graphics.icons:
+            removal_icon_rect = self.graphics.icons['credits'].get_rect(center=(removal_button_rect.centerx - text_width//2 - 10, removal_button_rect.centery))
+            self.graphics.screen.blit(self.graphics.icons['credits'], removal_icon_rect)
+        
+        # Store removal button for click detection
+        self.buttons["enter_removal_mode"] = removal_button_rect
         
         # Back button
         self.draw_button(40, 620, 150, 40, "Back", "back")

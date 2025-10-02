@@ -1,4 +1,4 @@
-# hex_map.py
+# hex_map.py - Updated with road drawing functionality
 import pygame
 import math
 import random
@@ -13,6 +13,7 @@ class HexMap:
         self.hex_size = hex_size
         self.hexagons = []
         self.selected_hex = None
+        self.area_of_effect_hexes = []  # New: store hexes for AoE visualization
         self.create_map()
     
     def create_map(self):
@@ -213,38 +214,124 @@ class HexMap:
                 return hexagon
         return None
     
-    def get_neighbor_elevations(self, hexagon):
-        """Get elevations of all neighbors for a hexagon"""
+    def hex_distance(self, pos1, pos2):
+        """Proper hex grid distance calculation using axial coordinates"""
+        x1, y1 = pos1
+        x2, y2 = pos2
+        
+        # Convert to axial coordinates
+        z1 = -x1 - y1
+        z2 = -x2 - y2
+        
+        return (abs(x1 - x2) + abs(y1 - y2) + abs(z1 - z2)) // 2
+    
+    def is_hex_accessible(self, from_hex, to_hex):
+        """Check if a hex is accessible considering elevation differences"""
+        if not from_hex or not to_hex:
+            return False
+        elevation_diff = abs(from_hex.elevation - to_hex.elevation)
+        return elevation_diff < 2  # Accessible if elevation difference is 0 or 1
+
+    def get_area_of_effect_hexes(self, center_pos, radius):
+        """Get all hexes within radius of center position, considering accessibility"""
+        center_hex = self.get_hex_at_grid(center_pos[0], center_pos[1])
+        if not center_hex:
+            return []
+        
+        visited = set()
+        queue = [(center_hex, 0)]  # (hex, distance)
+        affected_hexes = []
+        
+        while queue:
+            current_hex, distance = queue.pop(0)
+            
+            if current_hex in visited:
+                continue
+                
+            visited.add(current_hex)
+            affected_hexes.append(current_hex)
+            
+            # If we haven't reached max distance, explore neighbors
+            if distance < radius:
+                # Get all neighbor positions
+                neighbor_positions = self.get_neighbor_positions(current_hex.map_x, current_hex.map_y)
+                
+                for pos in neighbor_positions:
+                    neighbor_hex = self.get_hex_at_grid(pos[0], pos[1])
+                    if neighbor_hex and neighbor_hex not in visited:
+                        # Check if this neighbor is accessible from current hex
+                        if self.is_hex_accessible(current_hex, neighbor_hex):
+                            queue.append((neighbor_hex, distance + 1))
+        
+        return affected_hexes
+    
+    def get_neighbor_positions(self, x, y):
+        """Get neighboring hex positions"""
         directions = [
             (0, -1), (1, 0), (0, 1), 
             (-1, 1), (-1, 0), (-1, -1),
         ]
         
-        neighbor_elevations = []
+        neighbors = []
         for dx, dy in directions:
-            neighbor = None
-            # For flat-top hexagons, the neighbor calculation depends on whether the row is odd or even
-            if (hexagon.map_y) % 2 == 1:  # odd row
-                # Adjust x coordinate for odd rows
-                adj_dx = dx
+            neighbor_x = x + dx
+            neighbor_y = y + dy
+            
+            # Adjust for odd/even rows
+            if y % 2 == 1:  # odd row
                 if dy == 1 or dy == -1:
-                    adj_dx = dx + 1
-                neighbor = self.get_hex_at_grid(hexagon.map_x + adj_dx, hexagon.map_y + dy)
-            else:  # Even row
-                neighbor = self.get_hex_at_grid(hexagon.map_x + dx, hexagon.map_y + dy)
+                    neighbor_x = x + dx + 1
+            
+            neighbors.append((neighbor_x, neighbor_y))
+            
+        return neighbors
+
+    def get_neighbor_buildings(self, hexagon):
+        """Get neighboring buildings for a hexagon"""
+        neighbor_buildings = []
+        neighbor_positions = self.get_neighbor_positions(hexagon.map_x, hexagon.map_y)
+        
+        for pos in neighbor_positions:
+            neighbor_hex = self.get_hex_at_grid(pos[0], pos[1])
+            if neighbor_hex and neighbor_hex.building:
+                if self.is_hex_accessible(hexagon, neighbor_hex):
+                    neighbor_buildings.append(neighbor_hex.building)
                 
-            if neighbor:
-                neighbor_elevations.append(neighbor.elevation)
+        return neighbor_buildings
+    
+    def get_all_building_neighbors(self):
+        """Get all building neighbors mapping for crime spreading"""
+        building_neighbors = {}
+        
+        for hexagon in self.hexagons:
+            if hexagon.building:
+                neighbors = self.get_neighbor_buildings(hexagon)
+                building_neighbors[hexagon.building] = neighbors
+                
+        return building_neighbors
+
+    def get_neighbor_elevations(self, hexagon):
+        """Get elevations of all neighbors for a hexagon - UPDATED to use get_neighbor_positions"""
+        neighbor_elevations = []
+        neighbor_positions = self.get_neighbor_positions(hexagon.map_x, hexagon.map_y)
+        
+        for pos in neighbor_positions:
+            neighbor_hex = self.get_hex_at_grid(pos[0], pos[1])
+            if neighbor_hex:
+                neighbor_elevations.append(neighbor_hex.elevation)
             else:
                 neighbor_elevations.append(None)
                 
         return neighbor_elevations
-    
+
     def place_buildings(self, buildings):
         """Place initial buildings on the map"""
         # Clear existing buildings
         for hexagon in self.hexagons:
             hexagon.building = None
+        
+        # Track occupied hexes to avoid duplicates
+        occupied_hexes = set()
         
         # Find all regolith hexes for mine placement
         regolith_hexes = [hex for hex in self.hexagons if hex.surface_type == "regolith"]
@@ -263,17 +350,43 @@ class HexMap:
             if i < len(buildings):
                 # For mine, find a regolith hex near the target position
                 if building_type == "Mine" and regolith_hexes:
-                    # Find the closest regolith hex to the target position
+                    # Find the closest regolith hex to the target position that's not occupied
                     target_x, target_y = col, row
-                    closest_hex = min(regolith_hexes, key=lambda h: 
-                                    abs(h.map_x - target_x) + abs(h.map_y - target_y))
-                    closest_hex.place_building(buildings[i])
-                    regolith_hexes.remove(closest_hex)  # Remove from available regolith hexes
+                    available_regolith_hexes = [
+                        hex for hex in regolith_hexes 
+                        if (hex.map_x, hex.map_y) not in occupied_hexes
+                    ]
+                    
+                    if available_regolith_hexes:
+                        closest_hex = min(available_regolith_hexes, key=lambda h: 
+                                        abs(h.map_x - target_x) + abs(h.map_y - target_y))
+                        closest_hex.place_building(buildings[i])
+                        occupied_hexes.add((closest_hex.map_x, closest_hex.map_y))
+                        regolith_hexes.remove(closest_hex)  # Remove from available regolith hexes
+                    else:
+                        # Fallback: use the specified position if no regolith hexes available
+                        hexagon = self.get_hex_at_grid(col, row)
+                        if hexagon and (col, row) not in occupied_hexes:
+                            hexagon.place_building(buildings[i])
+                            occupied_hexes.add((col, row))
                 else:
-                    # For other buildings, use the specified position
+                    # For other buildings, use the specified position if not occupied
                     hexagon = self.get_hex_at_grid(col, row)
-                    if hexagon:
+                    if hexagon and (col, row) not in occupied_hexes:
                         hexagon.place_building(buildings[i])
+                        occupied_hexes.add((col, row))
+                    else:
+                        # If the target position is occupied, find the nearest available hex
+                        available_hexes = [
+                            hex for hex in self.hexagons 
+                            if (hex.map_x, hex.map_y) not in occupied_hexes
+                        ]
+                        if available_hexes:
+                            # Find the closest available hex to the target position
+                            closest_hex = min(available_hexes, key=lambda h: 
+                                            abs(h.map_x - col) + abs(h.map_y - row))
+                            closest_hex.place_building(buildings[i])
+                            occupied_hexes.add((closest_hex.map_x, closest_hex.map_y))
     
     def get_hex_at_grid(self, col, row):
         """Get hexagon at grid coordinates"""
@@ -308,6 +421,8 @@ class HexMap:
             
             if required_surface:
                 instruction_text = instruction_font.render(f"Click on a {required_surface} hexagon to place building. Press ESC to cancel construction", True, (255, 255, 255))
+            elif self.game.selected_building_type == "REMOVAL":
+                instruction_text = instruction_font.render("Click on a hexagon with a building to remove it. Press ESC to cancel removal", True, (255, 255, 255))
             else:
                 instruction_text = instruction_font.render("Click on an empty hexagon to place building. Press ESC to cancel construction", True, (255, 255, 255))
                 
@@ -320,7 +435,7 @@ class HexMap:
         for hexagon in self.hexagons:
             selected = (hexagon == self.selected_hex)
             neighbor_elevations = self.get_neighbor_elevations(hexagon)
-            
+
             # Highlight empty hexagons in construction mode
             construction_highlight = False
             construction_valid = False
@@ -349,15 +464,74 @@ class HexMap:
                     pygame.draw.polygon(screen, (0, 255, 0), hexagon.vertices, 3)
                 else:
                     # Invalid construction site - draw with red tint
-                    #overlay = pygame.Surface((hexagon.rect.width, hexagon.rect.height), pygame.SRCALPHA)
-                    #overlay.fill((255, 0, 0, 60))  # Red tint for invalid placement
-                    #screen.blit(overlay, hexagon.rect.topleft)
                     hexagon.draw(screen, colors, fonts, False, neighbor_elevations)
                     # Draw a red outline
                     pygame.draw.polygon(screen, (255, 0, 0), hexagon.vertices, 3)
             else:
                 hexagon.draw(screen, colors, fonts, selected, neighbor_elevations)
+        
+        # Draw area of effect highlights if a building with AoE is selected
+        if (self.selected_hex and self.selected_hex.building and 
+            hasattr(self.selected_hex.building, 'area_of_effect_radius') and 
+            self.selected_hex.building.area_of_effect_radius > 0):
+            
+            self.draw_area_of_effect(screen, self.selected_hex.building)
     
+    def draw_area_of_effect(self, screen, building):
+        """Draw the area of effect for a building using hexagon's drawing method"""
+        if not building.hex_position:
+            return
+            
+        center_x, center_y = building.hex_position
+        center_hex = self.get_hex_at_grid(center_x, center_y)
+        if not center_hex:
+            return
+            
+        # Get all hexes in area of effect using hex_map's method
+        affected_hexes = building.get_area_of_effect_hexes(self)
+        
+        # Choose color based on building type
+        if hasattr(building, "crime_reduction_per_worker"):
+            base_color = (0, 100, 255)  # Blue for police
+        else:
+            base_color = (100, 255, 100)  # Green for others
+        
+        # Draw highlights on all affected hexes
+        for hexagon in affected_hexes:
+            # Use hex_map's distance calculation
+            distance = self.hex_distance(building.hex_position, (hexagon.map_x, hexagon.map_y))
+            
+            # Calculate alpha based on distance
+            max_alpha = 80
+            alpha = max_alpha * (1 - (distance / building.area_of_effect_radius))
+            alpha = max(20, alpha)
+            
+            # Use hexagon's built-in method to draw the highlight
+            hexagon.draw_area_of_effect_highlight(screen, base_color, int(alpha))
+        
+        # Highlight the center building
+        center_hex.draw_area_of_effect_highlight(screen, (255, 255, 0), 100)
+        
+        # Draw info text
+        self.draw_area_of_effect_info(screen, building)
+
+    def draw_area_of_effect_info(self, screen, building):
+        """Draw information about the area of effect"""
+        if hasattr(building, "crime_reduction_per_worker"):
+            effect_text = f"Police Coverage: {building.assigned_workers}/{building.max_workers} workers"
+            crime_reduction = building.calculate_crime_reduction()
+            if crime_reduction > 0:
+                effect_text += f" (-{crime_reduction} crime)"
+        else:
+            effect_text = f"Area of Effect: {building.area_of_effect_radius} hexes"
+            
+        text_surface = self.game.graphics.small_font.render(effect_text, True, self.game.graphics.colors['text'])
+        text_bg = pygame.Surface((text_surface.get_width() + 10, text_surface.get_height() + 5), pygame.SRCALPHA)
+        text_bg.fill((0, 0, 0, 180))
+        screen.blit(text_bg, (self.x + 10, self.y + 10))
+        screen.blit(text_surface, (self.x + 15, self.y + 12))
+
+    # hex_map.py - updated handle_click method
     def handle_click(self, pos):
         """Handle mouse click on the map"""
         # Only handle clicks within the map area
@@ -365,8 +539,17 @@ class HexMap:
         if map_rect.collidepoint(pos):
             hexagon = self.get_hex_at_position(pos)
             
+            # If in removal mode, remove building instead of selecting
+            if hasattr(self, 'game') and self.game.construction_mode and self.game.selected_building_type == "REMOVAL":
+                if hexagon and hexagon.building:
+                    self.remove_building(hexagon)
+                    return None
+                elif hexagon and not hexagon.building:
+                    self.game.graphics.show_message("No building to remove on this hexagon!")
+                    return None
+            
             # If in construction mode, place building instead of selecting
-            if hasattr(self, 'game') and self.game.construction_mode and self.game.selected_building_type:
+            elif hasattr(self, 'game') and self.game.construction_mode and self.game.selected_building_type:
                 if hexagon and not hexagon.building:
                     # Check if the hexagon is valid for the selected building type
                     building_type = self.game.selected_building_type
@@ -393,6 +576,43 @@ class HexMap:
             self.selected_hex = hexagon
             return hexagon
         return None
+
+    def remove_building(self, hexagon):
+        """Remove a building from the selected hexagon"""
+        removal_cost = 200
+        
+        if self.game.resources.credits >= removal_cost:
+            building = hexagon.building
+            
+            # Handle colonists in residential buildings
+            if hasattr(building, 'residents') and building.residents:
+                # Remove all residents from the habitat
+                for colonist in building.residents[:]:  # Use slice copy to avoid modification during iteration
+                    building.remove_resident(colonist)
+            
+            # Handle workers in production buildings
+            if hasattr(building, 'assigned_colonists') and building.assigned_colonists:
+                # Unassign all workers from the building
+                for colonist in building.assigned_colonists[:]:  # Use slice copy
+                    building.remove_colonist(colonist)
+            
+            # Remove building from game buildings list
+            if building in self.game.buildings:
+                self.game.buildings.remove(building)
+            
+            # Remove building from hexagon
+            hexagon.remove_building()
+            
+            # Deduct removal cost
+            self.game.resources.credits -= removal_cost
+            
+            # Clear removal mode
+            self.game.construction_mode = False
+            self.game.selected_building_type = None
+            
+            self.game.graphics.show_message(f"Building removed successfully! {removal_cost} credits deducted.")
+        else:
+            self.game.graphics.show_message(f"Not enough credits! Building removal costs {removal_cost} credits.")
 
     def place_new_building(self, hexagon):
         """Place a new building on the selected hexagon"""

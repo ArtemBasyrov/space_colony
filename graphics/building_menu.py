@@ -1,16 +1,19 @@
 import pygame
 
 class BuildingMenu:
-    def __init__(self, screen):
+    def __init__(self, screen, x, y, width, height):
         self.screen = screen
         self.visible = False
         self.selected_building = None
-        self.rect = pygame.Rect(840, 420, 164, 180)
+        self.rect = pygame.Rect(x, y, width, height)
         
         # Store button rectangles for click handling
-        self.add_button_rect = pygame.Rect(850, 550, 70, 25)
-        self.remove_button_rect = pygame.Rect(930, 550, 70, 25)
-        self.close_button_rect = pygame.Rect(890, 580, 70, 25)
+        button_width = 70
+        button_height = 25
+        self.add_button_rect = pygame.Rect(self.rect.x+8, self.rect.y+self.rect.height-45, button_width, button_height)
+        self.remove_button_rect = pygame.Rect(self.rect.x+16+button_width, self.rect.y+self.rect.height-45, button_width, button_height)
+        self.close_button_rect = pygame.Rect(self.rect.x+int(self.rect.width/2 - button_width/2), 
+                                             self.rect.y+self.rect.height-15, button_width, button_height)
     
     def format_resource_value(self, value):
         """Format resource values to 2 decimal places"""
@@ -51,13 +54,20 @@ class BuildingMenu:
         self.screen.draw_panel(self.rect.x, self.rect.y, self.rect.width, self.rect.height, self.selected_building.name)
         y_offset = self.rect.y + 60
 
+        # Show crime information for all buildings
+        if hasattr(self.selected_building, 'crime_level'):
+            crime_text = f"Crime: {self.selected_building.crime_level:.1f}%"
+            crime_color = self.screen.graphics.colors['warning'] if self.selected_building.crime_level > 50 else self.screen.graphics.colors['text']
+            crime_surf = self.screen.graphics.small_font.render(crime_text, True, crime_color)
+            self.screen.graphics.screen.blit(crime_surf, (self.rect.x + 10, y_offset))
+            y_offset -= 20
+
         # Add housing info for Habitat Blocks
         if hasattr(self.selected_building, 'residents'):
-            y_offset -= 20
             housing_text = self.screen.graphics.small_font.render(f"Residents: {len(self.selected_building.residents)}/{self.selected_building.capacity}", True, self.screen.graphics.colors['text'])
             self.screen.graphics.screen.blit(housing_text, (self.rect.x + 10, y_offset))
             
-            y_offset += 25
+            y_offset += 40
             quality_text = self.screen.graphics.small_font.render(f"Quality: {self.screen.format_number(self.selected_building.quality)}", True, self.screen.graphics.colors['text'])
             self.screen.graphics.screen.blit(quality_text, (self.rect.x + 10, y_offset))
             
@@ -74,10 +84,12 @@ class BuildingMenu:
         
         # Draw worker count
         text = self.screen.graphics.small_font.render(f"Workers: {self.selected_building.assigned_workers}/{self.selected_building.max_workers}", True, self.screen.graphics.colors['text'])
-        self.screen.graphics.screen.blit(text, (self.rect.x + 10, self.rect.y + 40))
+        self.screen.graphics.screen.blit(text, (self.rect.x + 10, y_offset))
+        y_offset += 40
         
         # Show production/consumption info with ICONS instead of symbols
-        production = self.selected_building.calculate_production()
+        resource_manager = self.screen.game.resources
+        production = self.selected_building.calculate_effective_production(resource_manager)
         consumption = self.selected_building.calculate_consumption()
     
         for resource, amount in production.items():

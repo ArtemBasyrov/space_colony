@@ -1,6 +1,7 @@
 # buildings.py - update the Building class
 class Building:
-    def __init__(self, name, description, max_workers, energy_consumption=0, mineral_consumption=0, required_surface=None):
+    def __init__(self, name, description, max_workers, energy_consumption=0, mineral_consumption=0, 
+                 required_surface=None, area_of_effect_radius=0):
         self.name = name
         self.description = description
         self.max_workers = max_workers
@@ -11,12 +12,29 @@ class Building:
         self.required_surface = required_surface  # None for any surface, or specific surface type
         self.active = True
         self.base_wage = 6  # Base wage for all workers
+        self.crime_level = 0  # 0-100 crime level
+        self.crime_resistance = 1.0  # Resistance to crime (higher = less affected)
+        self.is_crime_source = False
+        self.area_of_effect_radius = area_of_effect_radius  # New: radius in hexes for area effects
+        self.hex_position = None  # New: store which hex this building is placed on
         
     def can_be_placed_on(self, hexagon):
         """Check if building can be placed on this hexagon type"""
         if self.required_surface is None:
             return True
         return hexagon.surface_type == self.required_surface
+    
+    def set_hex_position(self, hex_x, hex_y):
+        """Set the hex grid position for area of effect calculations"""
+        self.hex_position = (hex_x, hex_y)
+        
+    def get_area_of_effect_hexes(self, hex_map):
+        """Get all hexes within the area of effect radius using proper hex grid flood fill"""
+        if not self.hex_position or self.area_of_effect_radius == 0:
+            return []
+            
+        # Use hex_map's methods for distance and accessibility
+        return hex_map.get_area_of_effect_hexes(self.hex_position, self.area_of_effect_radius)
         
     def assign_colonist(self, colonist, wage=None):
         """Assign a colonist to this building with optional custom wage"""
@@ -62,12 +80,57 @@ class Building:
             if amount > 0 and getattr(resource_manager, resource, 0) < amount:
                 return False
         return True
-
+    
+    def update_crime(self, game):
+        """Update crime level based on unhappy colonists"""
+        # Base crime decay
+        self.crime_level = max(0, self.crime_level - 2)
+        
+        # Generate crime from unhappy workers
+        if hasattr(self, 'assigned_colonists') and self.assigned_colonists:
+            unhappy_workers = [c for c in self.assigned_colonists if c.happiness < 40]
+            if unhappy_workers:
+                # More unhappy workers = more crime
+                crime_generated = len(unhappy_workers) * 2
+                self.crime_level = min(100, self.crime_level + crime_generated)
+                self.is_crime_source = True
+        
+        # Generate crime from unhappy residents
+        if hasattr(self, 'residents') and self.residents:
+            unhappy_residents = [c for c in self.residents if c.happiness < 40]
+            if unhappy_residents:
+                crime_generated = len(unhappy_residents) * 3  # Residents generate more crime
+                self.crime_level = min(100, self.crime_level + crime_generated)
+                self.is_crime_source = True
+                
+        # Slums always generate crime
+        if hasattr(self, 'is_slum') and self.is_slum:
+            crime_generated = 8  # Constant crime from slums
+            self.crime_level = min(100, self.crime_level + crime_generated)
+            self.is_crime_source = True
+            
+    def get_crime_penalty(self):
+        """Get the productivity/quality penalty from crime"""
+        return max(0, self.crime_level * 0.01)  # 1% penalty per crime point
+    
     def calculate_effective_production(self, resource_manager):
-        """Calculate production, but return zero if not enough resources"""
+        """Apply crime penalty to production"""
         if not self.can_operate(resource_manager):
             return {}
-        return self.calculate_production()
+        else:
+            base_production = self.calculate_production()
+        
+        if not base_production:
+            return {}
+            
+        # Apply crime penalty (up to 100% reduction at 100 crime)
+        crime_penalty = 1.0 - self.get_crime_penalty()
+        
+        penalized_production = {}
+        for resource, amount in base_production.items():
+            penalized_production[resource] = amount * crime_penalty
+            
+        return penalized_production
 
 class Mine(Building):
     def __init__(self):
@@ -264,22 +327,78 @@ class Hospital(Building):
             
         return health_boost_per_colonist
     
-class HabitatBlock(Building):
+class PolicePrecinct(Building):
     def __init__(self):
         super().__init__(
-            name="Habitat Block",
-            description="Provides housing for colonists. Quality affects happiness.",
-            max_workers=0,  # No workers needed for housing
-            energy_consumption=2,
-            mineral_consumption=1
+            name="Police Precinct",
+            description="Reduces crime in surrounding buildings. Requires energy and fuel.",
+            max_workers=8,
+            energy_consumption=4,
+            mineral_consumption=0,
+            required_surface=None,
+            area_of_effect_radius=2  # Affects buildings within 2 hexes
         )
-        self.quality = 3.0  # Base quality level (affects happiness)
-        self.rent = 2.0     # Base rent cost per colonist
-        self.capacity = 10  # Maximum colonists that can live here
-        self.residents = []  # Colonists living in this habitat
+        self.fuel_consumption = 2
+        self.crime_reduction_per_worker = 3  # Crime reduction points per worker
         
     def calculate_production(self):
-        """Habitats don't produce resources"""
+        """Police precinct doesn't produce resources"""
+        return {}
+        
+    def calculate_consumption(self):
+        """Override consumption to include fuel"""
+        consumption = super().calculate_consumption()
+        consumption['fuel'] = self.fuel_consumption * (self.assigned_workers / max(1, self.max_workers))
+        return consumption
+        
+    def calculate_crime_reduction(self):
+        """Calculate total crime reduction based on assigned workers"""
+        if not self.active or self.assigned_workers == 0:
+            return 0
+            
+        return self.assigned_workers * self.crime_reduction_per_worker
+        
+    def apply_area_effect(self, game):
+        """Apply crime reduction to buildings in area of effect"""
+        if not self.active or self.assigned_workers == 0:
+            return
+            
+        crime_reduction = self.calculate_crime_reduction()
+        hex_map = game.graphics.screens['main'].hex_map
+        
+        # Get all hexes in area of effect
+        affected_hexes = self.get_area_of_effect_hexes(hex_map)
+        
+        for hexagon in affected_hexes:
+            if hexagon.building and hasattr(hexagon.building, 'crime_level'):
+                # Apply crime reduction (but not below 0)
+                hexagon.building.crime_level = max(0, hexagon.building.crime_level - crime_reduction)
+
+class ResidentialBuilding(Building):
+    """Parent class for all residential buildings"""
+    def __init__(self, name, description, quality, rent, capacity, energy_consumption=0, mineral_consumption=0):
+        super().__init__(
+            name=name,
+            description=description,
+            max_workers=0,  # Residential buildings don't have workers
+            energy_consumption=energy_consumption,
+            mineral_consumption=mineral_consumption,
+            required_surface=None
+        )
+        self.quality = quality
+        self.base_quality = quality  # Store original quality
+        self.rent = rent
+        self.capacity = capacity
+        self.residents = []
+        self.crime_resistance = 0.7  # Residential buildings are more susceptible to crime
+        
+    def update_quality_from_crime(self):
+        """Update quality based on crime level - minimum quality of 1"""
+        quality_penalty = self.get_crime_penalty() * 2  # Crime has stronger effect on quality
+        self.quality = max(1.0, self.base_quality - quality_penalty)
+        
+    def calculate_production(self):
+        """Residential buildings don't produce resources"""
         return {}
         
     def add_resident(self, colonist):
@@ -287,6 +406,8 @@ class HabitatBlock(Building):
         if len(self.residents) < self.capacity:
             self.residents.append(colonist)
             colonist.housing = self
+            colonist.housing_quality = self.quality
+            colonist.rent_cost = self.rent
             return True
         return False
         
@@ -295,6 +416,8 @@ class HabitatBlock(Building):
         if colonist in self.residents:
             self.residents.remove(colonist)
             colonist.housing = None
+            colonist.housing_quality = 0
+            colonist.rent_cost = 0
             return True
         return False
         
@@ -305,10 +428,44 @@ class HabitatBlock(Building):
     def update_rent(self, new_rent):
         """Update the rent amount"""
         self.rent = new_rent
+        # Update rent for all current residents
+        for colonist in self.residents:
+            colonist.rent_cost = new_rent
         
     def update_quality(self, new_quality):
         """Update the quality level"""
         self.quality = new_quality
+        self.base_quality = new_quality
+        # Update quality for all current residents
+        for colonist in self.residents:
+            colonist.housing_quality = new_quality
+
+class HabitatBlock(ResidentialBuilding):
+    def __init__(self):
+        super().__init__(
+            name="Habitat Block",
+            description="Provides housing for colonists. Quality affects happiness.",
+            quality=3.0,
+            rent=2.0,
+            capacity=10,
+            energy_consumption=0,
+            mineral_consumption=0
+        )
+        # All common functionality is inherited from ResidentialBuilding
+
+class Slums(ResidentialBuilding):
+    def __init__(self):
+        super().__init__(
+            name="Slums",
+            description="Makeshift housing that appears when colonists are desperate. Zero rent but very poor quality. Generates crime.",
+            quality=1.0,
+            rent=0.0,
+            capacity=10,
+            energy_consumption=0,
+            mineral_consumption=0
+        )
+        self.is_slum = True
+        self.crime_resistance = 0.3  # Slums have very low crime resistance
 
 def get_building_metadata(building_class):
     """Extract name and description from a building class by creating a temporary instance"""
@@ -360,6 +517,11 @@ BUILDING_CATALOG = {
         "class": Hospital,
         "price": 800,
         "metadata": get_building_metadata(Hospital)
+    },
+    "PolicePrecinct": {
+        "class": PolicePrecinct,
+        "price": 800,
+        "metadata": get_building_metadata(PolicePrecinct)
     },
     "HabitatBlock": {
         "class": HabitatBlock,

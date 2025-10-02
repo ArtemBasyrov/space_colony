@@ -7,6 +7,8 @@ from .market_screen import MarketScreen
 from .wages_screen import WagesScreen
 from events import EventType
 from .construction_screen import ConstructionScreen 
+from .stock_market_screen import StockMarketScreen
+from .settings_menu import SettingsMenu
 
 import sys
 import os
@@ -71,8 +73,12 @@ class Graphics:
             'market': MarketScreen(self),
             'wages': WagesScreen(self),
             'construction': ConstructionScreen(self),
+            'stock_market': StockMarketScreen(self), 
         }
         self.current_screen = 'main'
+
+        # Add settings menu
+        self.settings_menu = SettingsMenu(self)
         
         # UI state
         self.message = ""
@@ -154,13 +160,42 @@ class Graphics:
             for event in pygame.event.get():
                 if event.type == QUIT:
                     running = False
-                # Pass ALL events to current screen (not just mouse events)
-                self.screens[self.current_screen].handle_event(event)
+                
+                # Handle settings menu first if it's visible
+                if self.settings_menu.visible:
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        action = self.settings_menu.handle_click(event.pos)
+                        if action:
+                            self.handle_settings_action(action)
+                    elif event.type == pygame.KEYDOWN:
+                        if self.settings_menu.handle_keydown(event):
+                            continue  # Event was handled by settings menu
+                else:
+                    # Pass events to current screen only if settings menu is not visible
+                    self.screens[self.current_screen].handle_event(event)
             
             # Draw the current screen
             self.screens[self.current_screen].draw()
+            
+            # Draw settings menu on top if visible
+            self.settings_menu.draw()
             
             pygame.display.flip()
             clock.tick(60)
         
         pygame.quit()
+
+    def handle_settings_action(self, action):
+        """Handle actions from the settings menu"""
+        if action == "save":
+            self.show_message("Game saved!")
+            # Add your actual save game logic here
+            self.settings_menu.hide()
+            
+        elif action == "quit":
+            pygame.quit()
+            import sys
+            sys.exit()
+            
+        elif action == "back":
+            self.settings_menu.hide()

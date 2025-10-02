@@ -32,6 +32,13 @@ class Population:
             if colonist.workplace and colonist in colonist.workplace.assigned_colonists:
                 colonist.workplace.assigned_colonists.remove(colonist)
                 colonist.workplace.assigned_workers -= 1
+            
+            # Remove from housing if housed
+            if colonist.housing and hasattr(colonist.housing, 'remove_resident'):
+                colonist.housing.remove_resident(colonist)
+                colonist.housing = None
+                colonist.housing_quality = 0
+                colonist.rent_cost = 0
                 
             self.colonists.remove(colonist)
             return True
@@ -116,12 +123,18 @@ class Population:
             building.assigned_workers = len(building.assigned_colonists)
         
     def update_housing(self, buildings):
-        """Update housing for all colonists"""
-        # Get all habitat buildings
+        """Update housing for all colonists with proper prioritization"""
+        # Get all habitat buildings (including slums)
         habitats = [b for b in buildings if hasattr(b, 'residents')]
         
-        # Update housing for each colonist
-        for colonist in self.colonists:
+        # Sort habitats by quality (highest first) so best housing gets filled first
+        habitats.sort(key=lambda h: h.quality, reverse=True)
+        
+        # Sort colonists by wage (highest first) so wealthiest get first pick
+        sorted_colonists = sorted(self.colonists, key=lambda c: c.wage, reverse=True)
+        
+        # Update housing for each colonist in order of priority
+        for colonist in sorted_colonists:
             colonist.update_housing_situation(habitats)
             
     def get_homeless_count(self):
@@ -148,6 +161,12 @@ class Population:
         self.update_housing(buildings)
         self.update_employment(buildings)
         self.update_health(buildings)
+
+        # Update crime system
+        self.update_crime_system(buildings)
+
+        # Check for slum spawning
+        self.check_slum_spawning(self.game)
         
         # Check for critical resource shortages
         oxygen_shortage = resources.oxygen <= 0
@@ -169,10 +188,10 @@ class Population:
             resources.credits -= total_wages
         else:
             # Can't pay full wages - severe happiness penalty
-            unpaid_ratio = (total_wages - resources.credits) / total_wages
+            #unpaid_ratio = (total_wages - resources.credits) / total_wages
             for colonist in self.employed_colonists:
-                colonist.happiness -= 20 * unpaid_ratio
-                colonist.debt += colonist.wage * unpaid_ratio  # Add unpaid wages to debt
+                colonist.happiness -= 40 #* unpaid_ratio
+                #colonist.debt += colonist.wage * unpaid_ratio  # Add unpaid wages to debt
             resources.credits = 0
             
         # Population changes based on happiness, health, and resource availability
@@ -227,12 +246,11 @@ class Population:
         
         # Handle colonists leaving
         leaving_colonists = []
-        leave_chance = 0.3
+        leave_chance = 0.10
         for colonist in self.colonists[:]:
-            if (colonist.happiness < 20 and 
-                colonist.debt > 50 and 
-                random.random() < leave_chance):
-                leaving_colonists.append(colonist)
+            if (colonist.happiness < 20 or colonist.debt > 50):
+                if (random.random() < leave_chance):
+                    leaving_colonists.append(colonist)
                 
         # Remove leaving colonists
         for colonist in leaving_colonists:
@@ -267,3 +285,116 @@ class Population:
         # Apply health boost to all colonists
         for colonist in self.colonists:
             colonist.health = min(100, colonist.health + total_health_boost)
+
+    def update_crime_system(self, buildings):
+        """Update and spread crime across all buildings"""
+        # First, let police precincts apply their area effects
+        self.apply_police_effects(buildings)
+        
+        # Then update crime in each building (generation)
+        for building in buildings:
+            if hasattr(building, 'update_crime'):
+                building.update_crime(self.game)
+        
+        # Spread crime between neighboring buildings using hex map
+        self.spread_crime_to_neighbors(buildings)
+        
+        # Update building effects (quality for residential buildings)
+        for building in buildings:
+            if hasattr(building, 'update_quality_from_crime'):
+                building.update_quality_from_crime()
+    
+    def apply_police_effects(self, buildings):
+        """Apply police precinct area of effect to reduce crime"""
+        police_precincts = [b for b in buildings if hasattr(b, 'crime_reduction_per_worker')]
+        
+        for precinct in police_precincts:
+            if precinct.active and precinct.assigned_workers > 0:
+                precinct.apply_area_effect(self.game)
+    
+    def spread_crime_to_neighbors(self, buildings):
+        """Spread crime from high-crime buildings to their neighbors using hex map"""
+        hex_map = self.game.graphics.screens['main'].hex_map
+        
+        # Get all building neighbors from hex map
+        building_neighbors = hex_map.get_all_building_neighbors()
+        
+        # Spread crime from each crime source to its neighbors
+        for building, neighbors in building_neighbors.items():
+            if building.is_crime_source and building.crime_level > 10:
+                for neighbor_building in neighbors:
+                    if hasattr(neighbor_building, 'crime_level'):
+                        # Spread crime based on source crime level and neighbor's resistance
+                        spread_amount = building.crime_level * 0.15  # 15% spread
+                        neighbor_building.crime_level = min(100, 
+                            neighbor_building.crime_level + (spread_amount / neighbor_building.crime_resistance))
+
+    def check_slum_spawning(self, game):
+        """Check if slums should spawn based on homeless situation"""
+        # Count homeless colonists who have been homeless for more than 3 days
+        long_term_homeless = [c for c in self.colonists if not c.housing and c.days_homeless >= 3]
+        
+        if not long_term_homeless:
+            return False
+            
+        homeless_count = len(long_term_homeless)
+        avg_homeless_days = sum(c.days_homeless for c in long_term_homeless) / homeless_count
+        
+        # Calculate spawn chance based on homeless count and days
+        base_chance = min(0.8, (homeless_count / 10) + (avg_homeless_days / 30))
+        
+        # Check if we should spawn a slum
+        if random.random() < base_chance:
+            self.spawn_slum(game)
+            return True
+            
+        return False
+
+    def spawn_slum(self, game):
+        """Spawn a slum building on the map"""
+        from buildings import Slums
+        
+        # Create the slum building
+        slum = Slums()
+        
+        # Find a valid position next to existing buildings
+        valid_hexes = self.find_slum_placement_hexes(game.graphics.screens['main'].hex_map)
+        
+        if valid_hexes:
+            # Choose a random valid hex
+            target_hex = random.choice(valid_hexes)
+            
+            # Place the slum
+            target_hex.place_building(slum)
+            game.buildings.append(slum)
+            
+            # Notify player
+            if game.graphics:
+                game.graphics.show_message("Slums have appeared due to housing shortages!")
+            
+            return True
+        
+        return False
+
+    def find_slum_placement_hexes(self, hex_map):
+        """Find valid hexes for slum placement (next to existing buildings) - UPDATED"""
+        valid_hexes = []
+        
+        # Find all hexes adjacent to existing buildings using HexMap methods
+        for hexagon in hex_map.hexagons:
+            # Skip hexes that already have buildings
+            if hexagon.building:
+                continue
+                
+            # Check if this hex is adjacent to any building using centralized neighbor function
+            neighbor_buildings = hex_map.get_neighbor_buildings(hexagon)
+            
+            if neighbor_buildings:  # If there are any neighboring buildings
+                # Check if the hexagon is accessible (has at least one accessible side)
+                neighbor_elevations = hex_map.get_neighbor_elevations(hexagon)
+                accessible_sides = hexagon.get_accessible_sides(neighbor_elevations)
+                
+                if any(accessible_sides):  # At least one side is accessible
+                    valid_hexes.append(hexagon)
+        
+        return valid_hexes

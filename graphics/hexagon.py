@@ -150,6 +150,8 @@ class Hexagon:
         """Place a building on this hexagon if valid"""
         if self.can_place_building(building):
             self.building = building
+            # Set the building's hex position for area of effect calculations
+            building.set_hex_position(self.map_x, self.map_y)
             return True
         return False
     
@@ -246,3 +248,21 @@ class Hexagon:
             else:
                 indicator_color = colors['warning']
             pygame.draw.circle(screen, indicator_color, (self.x, self.y), 5)
+
+    def draw_area_of_effect_highlight(self, screen, color, alpha):
+        """Draw an area of effect highlight on this hexagon"""
+        highlight_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+        
+        # Draw the highlight polygon
+        vertices_local = [
+            (v[0] - self.rect.x, v[1] - self.rect.y) 
+            for v in self.vertices
+        ]
+        pygame.draw.polygon(highlight_surface, (*color, alpha), vertices_local)
+        
+        # Apply to screen
+        screen.blit(highlight_surface, self.rect.topleft)
+        
+        # Draw border
+        border_color = (*color, min(255, alpha + 100))
+        pygame.draw.polygon(screen, border_color, self.vertices, 2)

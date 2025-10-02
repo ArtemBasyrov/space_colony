@@ -1,9 +1,10 @@
 import pygame
 
 class EconomyPanel:
-    def __init__(self, screen):
+    def __init__(self, screen, x, y, width, height):
         self.screen = screen
         self.rect = pygame.Rect(840, 260, 164, 150)
+        self.rect = pygame.Rect(x, y, width, height)
  
     def draw(self, population):
         """Draw the economy panel"""
@@ -23,5 +24,5 @@ class EconomyPanel:
         if self.screen.game.construction_mode and self.screen.game.selected_building_type:
             from buildings import get_building_name
             building_type = self.screen.game.selected_building_type
-            text = self.screen.graphics.small_font.render(f"Placing: {get_building_name(building_type)}", True, (100, 255, 100))
+            text = self.screen.graphics.small_font.render(f"Placing: {get_building_name(building_type)}", True, self.screen.graphics.colors['success'])
             self.screen.graphics.screen.blit(text, (self.rect.x + 10, self.rect.y + 100))

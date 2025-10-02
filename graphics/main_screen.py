@@ -19,13 +19,14 @@ class MainScreen(Screen):
         bottom_bar_height = 100 # Height of bottom bar
         
         # Side panels will be on the right, calculate their total width
-        side_panel_width = 250  # Width of each side panel
+        side_panel_width = 165
+        side_panel_area = side_panel_width+55+30  # Width of each side panel
         
         # New map dimensions to take up all space between top and bottom bars
         # and all horizontal space except for the right side panels
         map_x = 20  # Left margin
         map_y = top_bar_height + 20    # Below top bar with margin
-        map_width = self.graphics.width - side_panel_width - 10  # Account for right panels and margins
+        map_width = self.graphics.width - side_panel_area - 10  # Account for right panels and margins
         map_height = self.graphics.height - top_bar_height - bottom_bar_height - 40
         
         # Create hex map with new dimensions
@@ -36,9 +37,9 @@ class MainScreen(Screen):
         # Create UI components
         self.top_bar = TopBar(graphics)
         self.bottom_bar = BottomBar(graphics)
-        self.building_menu = BuildingMenu(self)
-        self.population_panel = PopulationPanel(self)
-        self.economy_panel = EconomyPanel(self)
+        self.population_panel = PopulationPanel(self, map_x+map_width+55, map_y, side_panel_width, 150)
+        self.economy_panel = EconomyPanel(self, map_x+map_width+55, map_y+160, side_panel_width, 150)
+        self.building_menu = BuildingMenu(self,  map_x+map_width+55, map_y+320, side_panel_width, 220)
         
         # Track if we've already handled a click in this frame
         self.click_handled = False
@@ -67,7 +68,7 @@ class MainScreen(Screen):
         
         # Calculate building production and consumption
         for building in self.game.buildings:
-            production = building.calculate_production()
+            production = building.calculate_effective_production(res)
             consumption = building.calculate_consumption()
             
             for resource, amount in production.items():
@@ -127,20 +128,27 @@ class MainScreen(Screen):
             if self.game.construction_mode:
                 self.cancel_construction()
 
+    # main_screen.py - update the cancel_construction method
     def cancel_construction(self):
         """Cancel the current construction and refund money"""
-        if self.game.construction_mode and self.game.pending_construction:
-            building_type, price = self.game.pending_construction
-            
-            # Refund the money
-            self.game.resources.credits += price
-            
-            # Reset construction state
-            self.game.construction_mode = False
-            self.game.selected_building_type = None
-            self.game.pending_construction = None
-            
-            self.graphics.show_message(f"Construction cancelled. {price} credits refunded.")
+        if self.game.construction_mode:
+            if self.game.selected_building_type == "REMOVAL":
+                # Just cancel removal mode, no refund needed
+                self.game.construction_mode = False
+                self.game.selected_building_type = None
+                self.graphics.show_message("Building removal cancelled.")
+            elif self.game.pending_construction:
+                building_type, price = self.game.pending_construction
+                
+                # Refund the money
+                self.game.resources.credits += price
+                
+                # Reset construction state
+                self.game.construction_mode = False
+                self.game.selected_building_type = None
+                self.game.pending_construction = None
+                
+                self.graphics.show_message(f"Construction cancelled. {price} credits refunded.")
     
     # In main_screen.py, modify the on_button_click method
     def on_button_click(self, action):
@@ -157,16 +165,11 @@ class MainScreen(Screen):
         elif action == "wages":
             self.graphics.set_screen('wages')
             
-        elif action == "construct":  # New action
+        elif action == "construct":
             self.graphics.set_screen('construction')
             
-        elif action == "save":
-            self.graphics.show_message("Game saved!")
-            
-        elif action == "quit":
-            pygame.quit()
-            import sys
-            sys.exit()
+        elif action == "settings":  # New action - show settings menu
+            self.graphics.settings_menu.show()
             
         # Handle building worker buttons - now using individual colonists
         elif action == "add_worker" and self.building_menu.selected_building:
@@ -195,7 +198,7 @@ class MainScreen(Screen):
             if building.assigned_colonists:
                 colonist = building.assigned_colonists[0]
                 if building.remove_colonist(colonist):
-                    self.graphics.show_message(f"Removed {colonist.id} from {building.name}")
+                    self.graphics.show_message(f"Removed colonist from {building.name}")
                     # Publish worker removed event
                     self.game.event_manager.publish(GameEvent(
                         EventType.BUILDING_WORKER_REMOVED,
