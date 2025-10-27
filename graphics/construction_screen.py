@@ -40,8 +40,8 @@ class ConstructionScreen(Screen):
         
         if self.game.resources.credits >= removal_cost:
             self.removal_mode = True
-            self.game.construction_mode = True
-            self.game.selected_building_type = "REMOVAL"
+            self.game.construction_system.construction_mode = True
+            self.game.construction_system.selected_building_type = "REMOVAL"
             
             self.graphics.show_message(f"Removal mode activated. Click on a building to remove it for {removal_cost} credits. Press ESC to cancel.")
             self.graphics.set_screen('main')
@@ -56,9 +56,9 @@ class ConstructionScreen(Screen):
         if self.game.resources.credits >= price:
             # Deduct credits and enter construction mode
             self.game.resources.credits -= price
-            self.game.construction_mode = True
-            self.game.selected_building_type = building_type
-            self.game.pending_construction = (building_type, price)
+            self.game.construction_system.construction_mode = True
+            self.game.construction_system.selected_building_type = building_type
+            self.game.construction_system.pending_construction = (building_type, price)
             
             # Store building info for potential refund
             building_name = get_building_name(building_type)
@@ -87,7 +87,8 @@ class ConstructionScreen(Screen):
     def draw(self):
         """Draw the construction screen"""
         # Background
-        self.graphics.screen.fill(self.graphics.colors['background'])
+        #self.graphics.screen.fill(self.graphics.colors['background'])
+        self.draw_animated_background()
 
         # Clear buttons from previous frame
         self.buttons.clear()
@@ -97,7 +98,7 @@ class ConstructionScreen(Screen):
         self.graphics.screen.blit(title_text, (20, 20))
         
         # Available credits with icon and text combined
-        credits_text = f"Available credits:"
+        credits_text = "Available credits:"
         credits_surface = self.graphics.header_font.render(credits_text, True, self.graphics.colors['text'])
         self.graphics.screen.blit(credits_surface, (50, 60))
         
@@ -154,7 +155,7 @@ class ConstructionScreen(Screen):
                 self.graphics.screen.blit(surface_text, (60, y_offset + 35))
             
             # Price with credits icon
-            price_text = self.graphics.normal_font.render(f"Price:", True, self.graphics.colors['text'])
+            price_text = self.graphics.normal_font.render("Price:", True, self.graphics.colors['text'])
             self.graphics.screen.blit(price_text, (40, y_offset + 55))
             if 'credits' in self.graphics.icons:
                 self.graphics.screen.blit(self.graphics.icons['credits'], (85, y_offset + 52))

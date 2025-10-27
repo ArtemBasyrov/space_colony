@@ -35,16 +35,16 @@ class BottomBar:
         pygame.draw.rect(self.graphics.screen, (25, 35, 55), (0, self.panel_y, self.width, self.height))
         pygame.draw.rect(self.graphics.screen, self.graphics.colors['highlight'], (0, self.panel_y, self.width, self.height), 1)
         
-        # Draw buttons - updated to have Settings button instead of individual ones
+        # Draw buttons - updated to include Quests button
         button_y = self.panel_y + 10
         button_spacing = 160
         
         self.draw_button(40, button_y, 150, 40, "Next Day", "next_day")
         self.draw_button(40 + button_spacing, button_y, 150, 40, "Market", "market")
         self.draw_button(40 + button_spacing * 2, button_y, 150, 40, "Wages", "wages")
-        self.draw_button(40 + button_spacing * 3, button_y, 150, 40, "Construct", "construct")
-        self.draw_button(40 + button_spacing * 4, button_y, 150, 40, "Game Menu", "settings")  # Changed to Settings
-        # Removed Save Game and Quit buttons
+        self.draw_button(40 + button_spacing * 3, button_y, 150, 40, "Construction", "construct")
+        self.draw_button(40 + button_spacing * 4, button_y, 150, 40, "Quests", "quests")  # NEW: Quests button
+        self.draw_button(40 + button_spacing * 5, button_y, 150, 40, "Game Menu", "settings")
     
     def handle_click(self, pos):
         """Handle clicks on bottom bar buttons"""

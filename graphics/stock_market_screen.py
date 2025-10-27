@@ -85,7 +85,8 @@ class StockMarketScreen(Screen):
     def draw(self):
         """Draw the stock market screen"""
         # Background
-        self.graphics.screen.fill(self.graphics.colors['background'])
+        #self.graphics.screen.fill(self.graphics.colors['background'])
+        self.draw_animated_background()
         
         # Title
         title_text = self.graphics.title_font.render("Galactic Stock Exchange", True, self.graphics.colors['text'])

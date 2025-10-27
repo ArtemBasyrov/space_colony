@@ -1,5 +1,5 @@
-# main_screen.py
 import pygame
+
 from .screen import Screen
 from .hex_map import HexMap
 from .top_bar import TopBar
@@ -125,28 +125,28 @@ class MainScreen(Screen):
         
         # NEW: Handle escape key to cancel construction
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            if self.game.construction_mode:
+            if self.game.construction_system.construction_mode:
                 self.cancel_construction()
 
     # main_screen.py - update the cancel_construction method
     def cancel_construction(self):
         """Cancel the current construction and refund money"""
-        if self.game.construction_mode:
-            if self.game.selected_building_type == "REMOVAL":
+        if self.game.construction_system.construction_mode:
+            if self.game.construction_system.selected_building_type == "REMOVAL":
                 # Just cancel removal mode, no refund needed
-                self.game.construction_mode = False
-                self.game.selected_building_type = None
+                self.game.construction_system.construction_mode = False
+                self.game.construction_system.selected_building_type = None
                 self.graphics.show_message("Building removal cancelled.")
-            elif self.game.pending_construction:
-                building_type, price = self.game.pending_construction
+            elif self.game.construction_system.selected_building_type:
+                building_type, price = self.game.construction_system.pending_construction
                 
                 # Refund the money
                 self.game.resources.credits += price
                 
                 # Reset construction state
-                self.game.construction_mode = False
-                self.game.selected_building_type = None
-                self.game.pending_construction = None
+                self.game.construction_system.construction_mode = False
+                self.game.construction_system.selected_building_type = None
+                self.game.construction_system.selected_building_type = None
                 
                 self.graphics.show_message(f"Construction cancelled. {price} credits refunded.")
     
@@ -167,6 +167,9 @@ class MainScreen(Screen):
             
         elif action == "construct":
             self.graphics.set_screen('construction')
+            
+        elif action == "quests":  # NEW: Switch to quests screen
+            self.graphics.set_screen('quests')
             
         elif action == "settings":  # New action - show settings menu
             self.graphics.settings_menu.show()
@@ -215,9 +218,9 @@ class MainScreen(Screen):
     def draw(self):
         # Calculate resource changes for next day
         self.calculate_next_day_changes()
-        
-        # Background
-        self.graphics.screen.fill(self.graphics.colors['background'])
+
+        # Draw animated background first
+        self.draw_animated_background()
         
         # Draw UI components
         self.top_bar.draw(self.game.resources, self.calculated_changes)

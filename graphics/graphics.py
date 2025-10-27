@@ -9,6 +9,8 @@ from events import EventType
 from .construction_screen import ConstructionScreen 
 from .stock_market_screen import StockMarketScreen
 from .settings_menu import SettingsMenu
+from .quest_screen import QuestScreen
+from .message_screen import MessageScreen  
 
 import sys
 import os
@@ -73,7 +75,9 @@ class Graphics:
             'market': MarketScreen(self),
             'wages': WagesScreen(self),
             'construction': ConstructionScreen(self),
-            'stock_market': StockMarketScreen(self), 
+            'stock_market': StockMarketScreen(self),
+            'quests': QuestScreen(self),
+            'message': MessageScreen(self),
         }
         self.current_screen = 'main'
 
@@ -150,6 +154,17 @@ class Graphics:
         """Display a temporary message"""
         self.message = message
         self.message_timer = 120  # Show for 2 seconds at 60 FPS
+
+    def check_pending_messages(self):  # NEW
+        """Check if there are pending messages to display"""
+        if self.game.message_manager.has_pending_messages():
+            next_message = self.game.message_manager.get_next_pending_message()
+            if next_message:
+                message_screen = self.screens['message']
+                message_screen.set_message(next_message)
+                self.set_screen('message')
+                return True
+        return False
     
     def run(self):
         """Main game loop"""
@@ -160,6 +175,11 @@ class Graphics:
             for event in pygame.event.get():
                 if event.type == QUIT:
                     running = False
+
+                # Check for pending messages first - NEW
+                if self.current_screen == 'main' and self.game.message_manager.has_pending_messages():
+                    if self.check_pending_messages():
+                        continue  # Skip other event handling when showing message
                 
                 # Handle settings menu first if it's visible
                 if self.settings_menu.visible:
@@ -172,7 +192,9 @@ class Graphics:
                             continue  # Event was handled by settings menu
                 else:
                     # Pass events to current screen only if settings menu is not visible
-                    self.screens[self.current_screen].handle_event(event)
+                    current_screen = self.screens[self.current_screen]
+                    if hasattr(current_screen, 'handle_event'):
+                        current_screen.handle_event(event)
             
             # Draw the current screen
             self.screens[self.current_screen].draw()

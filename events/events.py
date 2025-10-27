@@ -8,7 +8,10 @@ class EventType:
     RESOURCE_LOW = "resource_low"
     GAME_SAVED = "game_saved"
     DAY_ADVANCED = "day_advanced"
-    # Add more event types as needed
+    QUEST_STARTED = "quest_started"
+    QUEST_COMPLETED = "quest_completed" 
+    QUEST_FAILED = "quest_failed"
+    QUEST_UPDATED = "quest_updated"
 
 class GameEvent:
     def __init__(self, event_type, message, data=None):

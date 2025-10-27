@@ -403,7 +403,7 @@ class HexMap:
         pygame.draw.rect(screen, colors['highlight'], (self.x, self.y, self.width, self.height), 2, border_radius=5)
         
         # Draw construction mode overlay if active
-        if hasattr(self, 'game') and self.game.construction_mode:
+        if hasattr(self, 'game') and self.game.construction_system.construction_mode:
             # Semi-transparent overlay
             overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
             overlay.fill((0, 255, 0, 30))  # Green tint with low opacity
@@ -413,7 +413,7 @@ class HexMap:
             instruction_font = fonts['normal']
             
             # Get building info for placement requirements
-            building_type = self.game.selected_building_type
+            building_type = self.game.construction_system.selected_building_type
             required_surface = None
             if building_type:
                 from buildings import get_building_required_surface
@@ -421,7 +421,7 @@ class HexMap:
             
             if required_surface:
                 instruction_text = instruction_font.render(f"Click on a {required_surface} hexagon to place building. Press ESC to cancel construction", True, (255, 255, 255))
-            elif self.game.selected_building_type == "REMOVAL":
+            elif self.game.construction_system.selected_building_type == "REMOVAL":
                 instruction_text = instruction_font.render("Click on a hexagon with a building to remove it. Press ESC to cancel removal", True, (255, 255, 255))
             else:
                 instruction_text = instruction_font.render("Click on an empty hexagon to place building. Press ESC to cancel construction", True, (255, 255, 255))
@@ -440,11 +440,11 @@ class HexMap:
             construction_highlight = False
             construction_valid = False
             
-            if hasattr(self, 'game') and self.game.construction_mode and not hexagon.building:
+            if hasattr(self, 'game') and self.game.construction_system.construction_mode and not hexagon.building:
                 construction_highlight = True
                 
                 # Check if this hexagon is valid for the selected building
-                building_type = self.game.selected_building_type
+                building_type = self.game.construction_system.selected_building_type
                 if building_type:
                     from buildings import get_building_required_surface
                     required_surface = get_building_required_surface(building_type)
@@ -540,7 +540,7 @@ class HexMap:
             hexagon = self.get_hex_at_position(pos)
             
             # If in removal mode, remove building instead of selecting
-            if hasattr(self, 'game') and self.game.construction_mode and self.game.selected_building_type == "REMOVAL":
+            if hasattr(self, 'game') and self.game.construction_system.construction_mode and self.game.construction_system.selected_building_type == "REMOVAL":
                 if hexagon and hexagon.building:
                     self.remove_building(hexagon)
                     return None
@@ -549,10 +549,10 @@ class HexMap:
                     return None
             
             # If in construction mode, place building instead of selecting
-            elif hasattr(self, 'game') and self.game.construction_mode and self.game.selected_building_type:
+            elif hasattr(self, 'game') and self.game.construction_system.construction_mode and self.game.construction_system.selected_building_type:
                 if hexagon and not hexagon.building:
                     # Check if the hexagon is valid for the selected building type
-                    building_type = self.game.selected_building_type
+                    building_type = self.game.construction_system.selected_building_type
                     from buildings import get_building_required_surface, get_building_name
                     required_surface = get_building_required_surface(building_type)
                     
@@ -607,8 +607,8 @@ class HexMap:
             self.game.resources.credits -= removal_cost
             
             # Clear removal mode
-            self.game.construction_mode = False
-            self.game.selected_building_type = None
+            self.game.construction_system.construction_mode = False
+            self.game.construction_system.selected_building_type = None
             
             self.game.graphics.show_message(f"Building removed successfully! {removal_cost} credits deducted.")
         else:
@@ -618,16 +618,16 @@ class HexMap:
         """Place a new building on the selected hexagon"""
         from buildings import create_building_from_name, get_building_name
         
-        building = create_building_from_name(self.game.selected_building_type)
+        building = create_building_from_name(self.game.construction_system.selected_building_type)
         if building:
             hexagon.place_building(building)
             self.game.buildings.append(building)
             
             # Clear construction state
-            building_type = self.game.selected_building_type
-            self.game.construction_mode = False
-            self.game.selected_building_type = None
-            self.game.pending_construction = None
+            building_type = self.game.construction_system.selected_building_type
+            self.game.construction_system.construction_mode = False
+            self.game.construction_system.selected_building_type = None
+            self.game.construction_system.selected_building_type = None
             
             self.game.graphics.show_message(f"{get_building_name(building_type)} constructed successfully!")
         else:

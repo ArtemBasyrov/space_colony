@@ -6,6 +6,7 @@ class Colonist:
         self.id = id
         self.health = random.randint(70, 90)
         self.happiness = random.randint(40, 60)
+        self.profession = None
         self.employed = False
         self.workplace = None
         self.wage = 0
@@ -174,7 +175,7 @@ class Colonist:
         self.happiness += (wage_satisfaction + employment_factor + housing_happiness - 
                           unemployment_penalty - debt_penalty + health_factor)
         self.happiness = max(0, min(100, self.happiness))
-        
+
         # Update health (basic decay for now)
         self.health -= 0.1
         if self.health < 30:
@@ -202,6 +203,8 @@ class Colonist:
         """Assign this colonist to a workplace with optional custom wage"""
         self.workplace = building
         self.employed = True
+        if hasattr(building, 'profession'):
+            self.profession = building.profession
         if wage is not None:
             self.wage = wage
         else:
@@ -211,6 +214,7 @@ class Colonist:
         """Remove this colonist from their workplace"""
         self.workplace = None
         self.employed = False
+        self.profession = 'unemployed'
         self.wage = 0
         
     def set_wage(self, new_wage):

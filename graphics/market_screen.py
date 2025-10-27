@@ -90,7 +90,8 @@ class MarketScreen(Screen):
     def draw(self):
         """Draw the market screen"""
         # Background
-        self.graphics.screen.fill(self.graphics.colors['background'])
+        #self.graphics.screen.fill(self.graphics.colors['background'])
+        self.draw_animated_background()
         
         # Title
         title_text = self.graphics.title_font.render("Interstellar Market", True, self.graphics.colors['text'])

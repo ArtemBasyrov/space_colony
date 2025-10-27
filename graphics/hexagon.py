@@ -166,7 +166,7 @@ class Hexagon:
             accessible = [True] * 6
         else:
             accessible = self.get_accessible_sides(neighbor_elevations)
-        
+
         # Draw hexagon with texture or fallback color
         if self.texture_surfaces.get(self.surface_type):
             # Create a mask for the hexagon shape
@@ -196,7 +196,11 @@ class Hexagon:
             # Fallback to solid color if texture not available
             base_color = self.surface_colors[self.surface_type]
             pygame.draw.polygon(screen, base_color, self.vertices)
-        
+
+        # Draw cliff visualization for elevated hexagons
+        if self.elevation > 0:
+            self.draw_vertical_cliff_lines(screen, colors)
+
         # Draw elevation indicator (darker lines on lower edges)
         if self.elevation > 0:
             for i in range(6):
@@ -217,7 +221,7 @@ class Hexagon:
             pygame.draw.circle(screen, elevation_color, (self.x+20, self.y+5), 5)
             
             # Draw elevation number
-            elev_text = fonts['small'].render(str(self.elevation), True, (255, 255, 255))
+            elev_text = fonts['small'].render(str(self.elevation), True, colors['text'])
             elev_rect = elev_text.get_rect(center=(self.x+20, self.y+5))
             screen.blit(elev_text, elev_rect)
         
@@ -266,3 +270,71 @@ class Hexagon:
         # Draw border
         border_color = (*color, min(255, alpha + 100))
         pygame.draw.polygon(screen, border_color, self.vertices, 2)
+
+    def draw_vertical_cliff_lines(self, screen, colors):
+        # Draw vertical lines to represent cliffs in the bottom area
+        cliff_color = colors['highlight']
+        num_cliff_lines = 8  # Increased number of lines for better visualization
+        
+        # Calculate the horizontal range for the bottom part of the hexagon
+        left_x = min(v[0] for v in self.vertices)
+        right_x = max(v[0] for v in self.vertices)
+        width = right_x - left_x
+        
+        # Draw vertical lines in the bottom area
+        for i in range(num_cliff_lines+1):
+            # Distribute lines evenly across the bottom width
+            line_x = left_x + i * (width / (num_cliff_lines))
+            
+            # Find the bottom edge y-coordinate at this x position
+            current_bottom_y = None
+            
+            # Check which bottom edge segment this x falls on
+            # Bottom edge is between vertices 1-2 and 2-3 in a flat-top hexagon
+            for j in range(1, 4):  # Check segments 1-2, 2-3
+                v1 = self.vertices[j]
+                v2 = self.vertices[(j + 1) % 6]
+                
+                # Check if line_x is between these vertices horizontally
+                if min(v1[0], v2[0]) <= line_x <= max(v1[0], v2[0]):
+                    # Calculate y at line_x using linear interpolation
+                    if v2[0] - v1[0] != 0:  # Avoid division by zero
+                        t = (line_x - v1[0]) / (v2[0] - v1[0])
+                        current_bottom_y = v1[1] + t * (v2[1] - v1[1])
+                        break
+            
+            # If we found a bottom edge point, draw the cliff line
+            if current_bottom_y is not None:
+                # Calculate the zero elevation y at the same x position
+                # For a zero elevation hexagon, the center y would be self.y (no elevation offset)
+                zero_center_y = self.y  # No elevation offset
+                
+                # Calculate bottom vertices for zero elevation
+                zero_vertices = []
+                for k in range(6):
+                    angle_deg = 60 * k - 30
+                    angle_rad = math.pi / 180 * angle_deg
+                    vertex_x = self.x + self.size * math.cos(angle_rad)
+                    vertex_y = zero_center_y + self.size * math.sin(angle_rad)  # No elevation offset
+                    zero_vertices.append((vertex_x, vertex_y))
+                
+                # Find the zero elevation bottom y at the same x position
+                zero_bottom_y = None
+                for j in range(1, 4):  # Check bottom segments 1-2, 2-3
+                    v1 = zero_vertices[j]
+                    v2 = zero_vertices[(j + 1) % 6]
+                    
+                    if min(v1[0], v2[0]) <= line_x <= max(v1[0], v2[0]):
+                        if v2[0] - v1[0] != 0:
+                            t = (line_x - v1[0]) / (v2[0] - v1[0])
+                            zero_bottom_y = v1[1] + t * (v2[1] - v1[1])
+                            break
+                
+                # Draw the vertical cliff line from elevated bottom to zero elevation bottom
+                if zero_bottom_y is not None and current_bottom_y < zero_bottom_y:
+                    # Start slightly inside the elevated hexagon
+                    start_y = current_bottom_y 
+                    end_y = zero_bottom_y
+                    
+                    # Draw the vertical cliff line
+                    pygame.draw.line(screen, cliff_color, (line_x, start_y), (line_x, end_y), 1)

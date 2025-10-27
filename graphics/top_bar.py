@@ -37,7 +37,7 @@ class TopBar:
     def draw(self, resources, calculated_changes):
         """Draw the top resource bar"""
         # Background
-        pygame.draw.rect(self.graphics.screen, (25, 35, 55), (0, 0, self.width, self.height))
+        pygame.draw.rect(self.graphics.screen, self.graphics.colors['panel'], (0, 0, self.width, self.height))
         pygame.draw.rect(self.graphics.screen, self.graphics.colors['highlight'], (0, 0, self.width, self.height), 1)
         
         # Get number of resources to display and calculate spacing

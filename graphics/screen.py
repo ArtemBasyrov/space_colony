@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 from abc import ABC, abstractmethod
 
 class Screen(ABC):
@@ -126,3 +127,100 @@ class Screen(ABC):
         change_color = self.graphics.colors['success'] if change >= 0 else self.graphics.colors['warning']
         change_surf = self.graphics.small_font.render(change_text, True, change_color)
         self.graphics.screen.blit(change_surf, (x + 40, y + 20))
+
+    def draw_animated_background(self):
+        """Draw an animated grid background with distortion wave"""
+        screen = self.graphics.screen
+        width, height = self.graphics.width, self.graphics.height
+        
+        # Use the original background color as base
+        screen.fill(self.graphics.colors['background'])
+        
+        # Grid parameters - match original color scheme but slightly lighter
+        grid_size = 40
+        base_grid_color = (30, 50, 70)  # Slightly lighter than background
+        distortion_color = (60, 100, 140)  # Even lighter for distortion effect
+        
+        # Wave parameters
+        current_time = pygame.time.get_ticks() / 1000.0
+        wave_speed = 1.5
+        wave_frequency = 0.015
+        wave_amplitude = 4.0
+        wave_width = 120  # Width of the distortion area
+        
+        # Extended range for wave starting position (starts earlier)
+        extended_width = width + 200
+        
+        # Calculate wave cycle with waiting time
+        pause_duration = 3.0  # Duration of pause between waves
+        wave_duration = 13.0   # Duration of the actual wave movement
+        cycle_duration = wave_duration + pause_duration # Total duration of one complete cycle (wave + pause)
+        
+        # Calculate position in cycle
+        cycle_position = current_time % cycle_duration
+        
+        if cycle_position <= wave_duration:
+            # Wave is active - calculate position across extended range
+            progress = cycle_position / wave_duration
+            wave_x = progress * extended_width - 100  # Start 100px left of screen
+        else:
+            # Pause period - no wave visible
+            wave_x = -wave_width - 100  # Positioned completely off-screen
+        
+        # Draw base grid (static)
+        for x in range(0, width, grid_size):
+            pygame.draw.line(screen, base_grid_color, (x, 0), (x, height), 1)
+        
+        for y in range(0, height, grid_size):
+            pygame.draw.line(screen, base_grid_color, (0, y), (width, y), 1)
+        
+        # Only draw distortion wave if wave is active (not in pause period)
+        if cycle_position <= wave_duration:
+            # Draw distortion wave effect
+            for x in range(0, width, 2):  # More detailed sampling for smooth wave
+                # Calculate distance from wave center and intensity
+                dist_from_wave = abs(x - wave_x)
+                if dist_from_wave < wave_width:
+                    # Calculate wave intensity (1 at center, 0 at edges)
+                    intensity = 1.0 - (dist_from_wave / wave_width)
+                    
+                    # Calculate distortion offset using sine wave
+                    distortion_offset = math.sin(x * wave_frequency - current_time * wave_speed) * wave_amplitude * intensity
+                    
+                    # Draw distorted vertical lines within wave area
+                    if x % grid_size == 0:
+                        start_y = 0
+                        end_y = height
+                        # Draw the distorted line
+                        pygame.draw.line(screen, distortion_color, 
+                                    (x + distortion_offset, start_y), 
+                                    (x + distortion_offset, end_y), 
+                                    1)
+                    
+                    # Draw distorted horizontal lines within wave area
+                    for y in range(0, height, grid_size):
+                        if y % grid_size == 0:
+                            # Each horizontal line gets its own distortion based on y position
+                            h_distortion = math.sin(y * 0.02 + current_time * 2) * wave_amplitude * intensity * 0.5
+                            start_x = max(0, x - 10)
+                            end_x = min(width, x + 10)
+                            pygame.draw.line(screen, distortion_color,
+                                        (start_x, y + h_distortion),
+                                        (end_x, y + h_distortion),
+                                        1)
+        
+        # Add subtle scanlines for that monitor feel
+        scanline_color = (15, 25, 35, 50)  # Very subtle dark scanlines
+        for y in range(0, height, 3):
+            scan_surface = pygame.Surface((width, 1), pygame.SRCALPHA)
+            scan_surface.fill(scanline_color)
+            screen.blit(scan_surface, (0, y))
+
+        # Add some random "static" dots for that old monitor feel
+        for _ in range(5):  # Only a few dots for performance
+            dot_x = random.randint(0, width)
+            dot_y = random.randint(0, height)
+            dot_size = random.randint(1, 2)
+            brightness = random.randint(30, 60)
+            pygame.draw.circle(screen, (brightness, brightness + 20, brightness), 
+                            (dot_x, dot_y), dot_size)

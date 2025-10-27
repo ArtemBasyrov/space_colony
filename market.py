@@ -64,6 +64,10 @@ class Market:
         # Transaction fees (10% markup for buying, 10% fee for selling)
         self.buy_markup = 1.1  # 10% markup
         self.sell_fee = 0.9    # 10% fee
+
+        # Price modifiers (for quest rewards)
+        self.price_modifiers = {resource: 1.0 for resource in self.base_prices.keys()}
+        self.fee_modifiers = {'buy': 1.0, 'sell': 1.0}  # 1.0 = normal fees
         
     def update_market(self):
         """Update market prices and record history - APPLY PLAYER INFLUENCE HERE"""
@@ -139,22 +143,22 @@ class Market:
         if resource not in self.prices:
             return 0, 0
             
-        # Calculate cost with 10% markup (using current day's prices)
-        cost = amount * self.prices[resource] * self.buy_markup
+        # Apply price modifier from quests
+        effective_price = self.prices[resource] * self.price_modifiers.get(resource, 1.0)
+        
+        # Calculate cost with dynamic markup (including quest modifiers)
+        cost = amount * effective_price * self.buy_markup * self.fee_modifiers['buy']
         cost = round(cost, 2)
         
         if credits >= cost:
-            # Queue player influence for next day (doesn't affect current prices)
             self.queue_player_influence(resource, amount, True)
             return amount, cost
         else:
-            # Can only buy what you can afford
-            affordable_amount = int(credits / (self.prices[resource] * self.buy_markup))
-            cost = affordable_amount * self.prices[resource] * self.buy_markup
+            affordable_amount = int(credits / (effective_price * self.buy_markup * self.fee_modifiers['buy']))
+            cost = affordable_amount * effective_price * self.buy_markup * self.fee_modifiers['buy']
             cost = round(cost, 2)
             
             if affordable_amount > 0:
-                # Queue player influence for next day
                 self.queue_player_influence(resource, affordable_amount, True)
             return affordable_amount, cost
             
@@ -162,13 +166,14 @@ class Market:
         if resource not in self.prices:
             return 0, 0
             
-        # Can't sell more than available
+        # Apply price modifier from quests  
+        effective_price = self.prices[resource] * self.price_modifiers.get(resource, 1.0)
+        
         sellable_amount = min(amount, available)
-        revenue = sellable_amount * self.prices[resource] * self.sell_fee  # 10% fee
+        revenue = sellable_amount * effective_price * self.sell_fee * self.fee_modifiers['sell']
         revenue = round(revenue, 2)
         
         if sellable_amount > 0:
-            # Queue player influence for next day (doesn't affect current prices)
             self.queue_player_influence(resource, sellable_amount, False)
         
         return sellable_amount, revenue
@@ -199,3 +204,18 @@ class Market:
             'buy_markup': self.buy_markup,
             'sell_fee': self.sell_fee,
         }
+    
+    def modify_base_price(self, resource_type: str, modifier: float):
+        """Permanently modify base price of a resource (quest reward)"""
+        if resource_type in self.base_prices:
+            self.price_modifiers[resource_type] = modifier
+            self.prices[resource_type] = self.base_prices[resource_type] * modifier
+            return True
+        return False
+        
+    def modify_market_fees(self, buy_modifier: float = None, sell_modifier: float = None):
+        """Modify market transaction fees (quest reward)"""
+        if buy_modifier is not None:
+            self.fee_modifiers['buy'] = buy_modifier
+        if sell_modifier is not None:
+            self.fee_modifiers['sell'] = sell_modifier

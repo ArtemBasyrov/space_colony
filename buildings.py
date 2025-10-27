@@ -1,7 +1,9 @@
+from professions import PROFESSIONS, get_profession_for_building, get_profession_default_wage
+
 # buildings.py - update the Building class
 class Building:
     def __init__(self, name, description, max_workers, energy_consumption=0, mineral_consumption=0, 
-                 required_surface=None, area_of_effect_radius=0):
+                 required_surface=None, area_of_effect_radius=0, profession='worker'):  # Add profession parameter
         self.name = name
         self.description = description
         self.max_workers = max_workers
@@ -11,7 +13,8 @@ class Building:
         self.mineral_consumption = mineral_consumption
         self.required_surface = required_surface  # None for any surface, or specific surface type
         self.active = True
-        self.base_wage = 6  # Base wage for all workers
+        self.profession = profession  # Use parameter
+        self.base_wage = get_profession_default_wage(self.profession)  # Base wage for all workers
         self.crime_level = 0  # 0-100 crime level
         self.crime_resistance = 1.0  # Resistance to crime (higher = less affected)
         self.is_crime_source = False
@@ -132,6 +135,7 @@ class Building:
             
         return penalized_production
 
+
 class Mine(Building):
     def __init__(self):
         super().__init__(
@@ -139,7 +143,8 @@ class Mine(Building):
             description="Extracts raw regolith from earth. Requires energy.",
             max_workers=20,
             energy_consumption=5,
-            required_surface="regolith"
+            required_surface="regolith",
+            profession=get_profession_for_building('Mine'),
         )
         self.production_rate = 2.0  # Raw regolith per worker
         
@@ -158,7 +163,8 @@ class EnergyGenerator(Building):
             description="Generates energy. Requires fuel.",
             max_workers=10,
             mineral_consumption=0,  # Now uses fuel instead of minerals
-            energy_consumption=0
+            energy_consumption=0,
+            profession=get_profession_for_building('EnergyGenerator')
         )
         self.fuel_consumption = 3  # New fuel consumption
         self.production_rate = 4.0  # Energy per worker
@@ -183,7 +189,8 @@ class OxygenGenerator(Building):
             name="Oxygen Synthesizer",
             description="Produces breathable oxygen. Requires energy.",
             max_workers=8,
-            energy_consumption=4
+            energy_consumption=4,
+            profession=get_profession_for_building('OxygenGenerator')
         )
         self.production_rate = 3.0  # Oxygen per worker
         
@@ -201,7 +208,8 @@ class HydroponicFarm(Building):
             name="Hydroponic Farm",
             description="Grows food. Requires significant energy.",
             max_workers=15,
-            energy_consumption=8
+            energy_consumption=8,
+            profession=get_profession_for_building('HydroponicFarm')
         )
         self.production_rate = 2.5  # Food per worker
         
@@ -220,7 +228,8 @@ class IceExtractor(Building):
             description="Extracts oxygen and hydrogen from ice deposits. Requires energy.",
             max_workers=12,
             energy_consumption=6,
-            required_surface="ice"
+            required_surface="ice",
+            profession=get_profession_for_building('IceExtractor')
         )
         self.oxygen_production_rate = 2.0  # Oxygen per worker
         self.hydrogen_production_rate = 1.5  # Hydrogen per worker
@@ -240,7 +249,8 @@ class ChemicalProcessingPlant(Building):
             name="Chemical Processing Plant",
             description="Converts hydrogen into fuel. Requires energy.",
             max_workers=8,
-            energy_consumption=4
+            energy_consumption=4,
+            profession=get_profession_for_building('ChemicalProcessingPlant')
         )
         self.hydrogen_consumption = 2  # Hydrogen consumed per worker
         self.production_rate = 1.0  # Fuel produced per worker
@@ -289,7 +299,8 @@ class Hospital(Building):
             description="Improves population health. Requires energy and raw regolith.",
             max_workers=6,
             energy_consumption=6,
-            mineral_consumption=2
+            mineral_consumption=2,
+            profession=get_profession_for_building('Hospital')
         )
         self.production_rate = 3.0  # Health points per worker
         self.max_capacity = 30  # Maximum colonists one hospital can effectively serve when fully staffed
@@ -336,7 +347,8 @@ class PolicePrecinct(Building):
             energy_consumption=4,
             mineral_consumption=0,
             required_surface=None,
-            area_of_effect_radius=2  # Affects buildings within 2 hexes
+            area_of_effect_radius=2,  # Affects buildings within 2 hexes
+            profession=get_profession_for_building('PolicePrecinct')
         )
         self.fuel_consumption = 2
         self.crime_reduction_per_worker = 3  # Crime reduction points per worker
